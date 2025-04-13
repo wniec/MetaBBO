@@ -3,7 +3,7 @@ from torch import nn
 from torch.distributions import Normal
 from agent.basic_agent import Basic_Agent
 from agent.networks import MLP
-from agent.utils import *
+from agent.utils import Memory, save_class
 
 
 class Actor(nn.Module):

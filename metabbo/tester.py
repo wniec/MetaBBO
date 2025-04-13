@@ -37,8 +37,6 @@ def cal_t1(problem, dim, fes):
     for i in range(10):
         x = np.random.rand(fes, dim)
         start = time.perf_counter()
-        # for i in range(fes):
-        #     problem.eval(x[i])
         problem.eval(x)
         end = time.perf_counter()
         T1 += (end - start) * 1000
@@ -70,11 +68,6 @@ class Tester(object):
             self.config.problem = self.config.problem[:-6]
 
         _, self.test_set = construct_problem_set(self.config)
-        # if 'L2L_Agent' in config.agent_for_cp or 'L2L_Agent' == config.agent:
-        #     pre_problem=config.problem
-        #     config.problem=pre_problem+'-torch'
-        #     _,self.torch_test_set = construct_problem_set(config)
-        #     config.problem=pre_problem
 
         self.seed = range(51)
         # initialize the dataframe for logging
@@ -144,9 +137,6 @@ class Tester(object):
         # calculate T0
         T0 = cal_t0(self.config.dim, self.config.maxFEs)
         self.test_results["T0"] = T0
-        # calculate T1
-        # T1 = cal_t1(self.test_set[0], self.config.dim, self.config.maxFEs)
-        # self.test_results['T1'] = T1
         pbar_len = (
             (len(self.t_optimizer_for_cp) + len(self.agent_for_cp))
             * self.test_set.N
@@ -254,11 +244,6 @@ def rollout(config):
         config.problem = config.problem[:-6]
 
     train_set, _ = construct_problem_set(config)
-    # if 'L2L_Agent' in config.agent_for_rollout:
-    #     pre_problem=config.problem
-    #     config.problem=pre_problem+'-torch'
-    #     torch_train_set,_ = construct_problem_set(config)
-    #     config.problem=pre_problem
 
     agent_load_dir = config.agent_load_dir
     n_checkpoint = config.n_checkpoint
@@ -306,13 +291,10 @@ def rollout(config):
             agent = None
             for checkpoint in range(0, n_checkpoint + 1):
                 agent = load_agents[agent_name][checkpoint]
-                # return_sum=0
                 for i, problem in enumerate(train_set):
                     for run in range(5):
                         np.random.seed(run)
-                        # if type(agent).__name__ == 'L2L_Agent':
-                        #     env = PBO_Env(torch_train_set[i],optimizer)
-                        # else:
+
                         env = PBO_Env(problem, optimizer)
 
                         info = agent.rollout_episode(env)

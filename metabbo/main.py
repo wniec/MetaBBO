@@ -2,8 +2,8 @@ import os
 
 import torch
 from trainer import Trainer
-from tester import *
-from config import *
+from tester import Tester, rollout, mgd_test, mte_test
+from config import get_config
 from logger import Logger, post_processing_rollout_statics, post_processing_test_statics
 import shutil
 import warnings
