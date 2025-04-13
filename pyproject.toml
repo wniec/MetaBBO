@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "metabbo"
+version = "0.1.0"
+description = ""
+authors = ["wniec <niecwladek@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+numpy = "^2.2.4"
+torch = "^2.6.0"
+matplotlib = "^3.10.1"
+pandas = "^2.2.3"
+scipy = "^1.15.2"
+scikit-optimize = "^0.10.2"
+deap = "^1.4.2"
+tqdm = "^4.67.1"
+openpyxl = "^3.1.5"
+ruff = "^0.11.5"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
