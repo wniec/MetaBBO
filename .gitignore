@@ -1,5 +1,7 @@
-.venv/*
-.ruff_cache/*
-agent_model/*
-output/*
+.venv/
+venv/
+.ruff_cache/
+agent_model/
+output/
 __pycache__/
+.idea/

@@ -173,7 +173,7 @@ def gen_algorithm_complexity_table(results: dict, out_dir: str) -> None:
     t0 = results["T0"]
     t1 = results["T1"]
     is_dict = False
-    if type(t1) is dict:
+    if isinstance(t1, dict):
         is_dict = True
     t2s = results["T2"]
     ratios = []
@@ -558,9 +558,7 @@ class Logger:
         # fig.legend(lines, labels, bbox_to_anchor=(plots/(plots+1)-0.02, 0.5), borderaxespad=0., loc=6, facecolor='whitesmoke')
 
         plt.subplots_adjust(left=0.05, right=0.95, wspace=0.1)
-        plt.savefig(
-            output_dir + "all_problem_cost_curve_logX.png", bbox_inches="tight"
-        )
+        plt.savefig(output_dir + "all_problem_cost_curve_logX.png", bbox_inches="tight")
         plt.close()
 
     def draw_concrete_performance_hist(

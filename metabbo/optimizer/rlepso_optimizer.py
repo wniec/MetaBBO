@@ -62,10 +62,10 @@ class RLEPSO_Optimizer(Learnable_Optimizer):
         self.__max_cost = c_cost.max()
 
         self.__particles: dict[str, torch.Tensor] = {
-            "current_position": rand_pos.clone(),  #  ps, dim
-            "c_cost": c_cost.clone(),  #  ps
+            "current_position": rand_pos.clone(),  # ps, dim
+            "c_cost": c_cost.clone(),  # ps
             "pbest_position": rand_pos.clone(),  # ps, dim
-            "pbest": c_cost.clone(),  #  ps
+            "pbest": c_cost.clone(),  # ps
             "gbest_position": gbest_position.clone(),  # dim
             "gbest_val": gbest_val,  # 1
             "velocity": rand_vel.clone(),  # ps,dim
@@ -147,7 +147,7 @@ class RLEPSO_Optimizer(Learnable_Optimizer):
         )
         per_group_num = self.__NP // self.__n_group
         for i in range(self.__n_group):
-            a = actions[i * self.__n_group : i * self.__n_group + 7]
+            a = torch.tensor(actions[i * self.__n_group : i * self.__n_group + 7])
             c_mutations[i * per_group_num : (i + 1) * per_group_num] = (
                 a[0]
                 * 0.01

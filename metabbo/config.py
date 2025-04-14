@@ -1,6 +1,8 @@
 import argparse
 import time
 
+import torch
+
 
 def get_config(args=None):
     parser = argparse.ArgumentParser()
@@ -196,6 +198,7 @@ def get_config(args=None):
     )
 
     config = parser.parse_args(args)
+    config.device = "cuda" if torch.cuda.is_available() else "cpu"
     config.maxFEs = 2000 * config.dim
     # for bo, maxFEs is relatively smaller due to time limit
     config.bo_maxFEs = 10 * config.dim
@@ -210,7 +213,7 @@ def get_config(args=None):
         config.problem = config.problem_to
         config.difficulty = config.difficulty_to
 
-    if config.problem in ["protein", "protein-torch"]:
+    if config.problem == "protein":
         config.dim = 12
         config.maxFEs = 1000
         config.bo_maxFEs = 10

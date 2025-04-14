@@ -10,8 +10,7 @@ import os
 from environment.basic_environment import PBO_Env
 from logger import Logger
 from optimizer.random_search import Random_search
-
-
+from optimizer.rlepso_optimizer import RLEPSO_Optimizer  # noqa 403
 
 
 def cal_t0(dim, fes):

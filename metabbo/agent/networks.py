@@ -1,5 +1,3 @@
-import torch.nn.functional as F
-import numpy as np
 from torch import nn
 
 
@@ -26,4 +24,3 @@ class MLP(nn.Module):
 
     def forward(self, x):
         return self.net(x)
-    

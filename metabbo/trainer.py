@@ -5,14 +5,14 @@ This file is used to train the agent.(for the kind of optimizer that is learnabl
 import pickle
 from tqdm import tqdm
 from environment.basic_environment import PBO_Env
-from utils import  construct_problem_set
+from utils import construct_problem_set
 import numpy as np
 import os
 import matplotlib
 import matplotlib.pyplot as plt
 import torch
-from agent import RLEPSO_Agent   # noqa: F401
-from optimizer import RLEPSO_Optimizer   # noqa: F401
+from agent import RLEPSO_Agent  # noqa: F401
+from optimizer import RLEPSO_Optimizer  # noqa: F401
 
 matplotlib.use("Agg")
 

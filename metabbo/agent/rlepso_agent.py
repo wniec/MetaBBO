@@ -183,7 +183,7 @@ class RLEPSO_Agent(Basic_Agent):
                 # total_cost = total_cost + gbest_val
 
                 # next
-                t = t + 1
+                t += 1
                 state = next_state
                 state = torch.FloatTensor(state).to(config.device)
                 if is_done:
