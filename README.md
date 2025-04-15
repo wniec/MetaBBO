@@ -10,16 +10,16 @@ It consists of refactored and modified parts of the following repositories:
 - <https://github.com/GMC-DRL/MetaBox>[[1]](#1)
 
 
-### installation:
+### Installation:
 
 ```bash
 git clone https://github.com/GMC-DRL/MetaBox.git && cd MetaBBo && pip install .
 ```
 
-### Example of an experiment
+### Running an experiment
 
 ```bash
-python3 metabbo/main.py --run_experiment --problem protein --difficulty easy --train_agent RLEPSO_Agent --train_optimizer RLEPSO_Optimizer
+python3 metabbo/main.py --run_experiment --problem protein --difficulty easy --train_agent RLEPSO_Agent --train_optimizer RLEPSO_Optimizer --max_learning_step=600 --n_checkpoint=1
 ```
 
 

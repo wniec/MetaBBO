@@ -80,8 +80,8 @@ if __name__ == "__main__":
             config.agent_load_dir, f"{config.train_agent}.pkl"
         )
         shutil.copy(
-            os.path.join(agent_save_dir, "checkpoint20.pkl"), test_model_file
-        )  # copy checkpoint20.pkl to agent_name.pkl
+            os.path.join(agent_save_dir, f"checkpoint{config.n_checkpoint-1}.pkl"), test_model_file
+        )  # copy checkpoint{i}.pkl to agent_name.pkl
         if (config.train_agent != config.agent) and (
             config.train_agent not in config.agent_for_cp
         ):

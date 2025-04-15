@@ -197,7 +197,7 @@ class Protein_Docking_Dataset(Dataset):
         if self.batch_size < 2:
             return self.data[self.index[item]]
         ptr = self.ptr[item]
-        index = self.index[ptr : min(ptr + self.batch_size, self.N)]
+        index = self.index[ptr: min(ptr + self.batch_size, self.N)]
         res = []
         for i in range(len(index)):
             res.append(self.data[index[i]])
