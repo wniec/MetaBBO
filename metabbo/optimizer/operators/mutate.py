@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Union
+from typing import Union, Optional
 
 
 def generate_random_individuals(
@@ -47,7 +47,7 @@ def rand_1_individual(
     population: np.ndarray,
     mutation_factor: float,
     pointer: int,
-    individuals: np.ndarray = None,
+    individuals: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     if individuals is None:
         individuals = generate_random_individuals(population.shape[0], 3, pointer)
@@ -75,7 +75,7 @@ def rand_2_single(
     population: np.ndarray,
     mutation_factor: float,
     pointer: int,
-    individuals: np.ndarray = None,
+    individuals: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     if individuals is None:
         individuals = generate_random_individuals(population.shape[0], 5, pointer)
@@ -110,7 +110,7 @@ def best_1_single(
     best: np.ndarray,
     mutation_factor: float,
     pointer: int,
-    individuals: np.ndarray = None,
+    individuals: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     if individuals is None:
         individuals = generate_random_individuals(population.shape[0], 2, pointer)
@@ -138,7 +138,7 @@ def best_2_single(
     best: np.ndarray,
     mutation_factor: float,
     pointer: int,
-    individuals: np.ndarray = None,
+    individuals: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     if individuals is None:
         individuals = generate_random_individuals(population.shape[0], 4, pointer)
@@ -160,12 +160,12 @@ def best_2(
     """
     if isinstance(mutation_factor, np.ndarray) and mutation_factor.ndim == 1:
         mutation_factor = mutation_factor.reshape(-1, 1)
-    r = generate_mutation_matrix(population.shape[0], 4)
+    individuals = generate_mutation_matrix(population.shape[0], 4)
     return best + mutation_factor * (
-        population[r[:, 0]]
-        - population[r[:, 1]]
-        + population[r[:, 2]]
-        - population[r[:, 3]]
+        population[individuals[:, 0]]
+        - population[individuals[:, 1]]
+        + population[individuals[:, 2]]
+        - population[individuals[:, 3]]
     )
 
 
@@ -174,12 +174,15 @@ def rand_to_best_1_single(
     best: np.ndarray,
     mutation_factor: float,
     pointer: int,
-    r: np.ndarray = None,
+    individuals: Optional[np.ndarray] = None,
 ) -> np.ndarray:
-    if r is None:
-        r = generate_random_individuals(population.shape[0], 3, pointer)
-    return population[r[0]] + mutation_factor * (
-        best - population[r[0]] + population[r[1]] - population[r[2]]
+    if individuals is None:
+        individuals = generate_random_individuals(population.shape[0], 3, pointer)
+    return population[individuals[0]] + mutation_factor * (
+        best
+        - population[individuals[0]]
+        + population[individuals[1]]
+        - population[individuals[2]]
     )
 
 
@@ -207,7 +210,7 @@ def rand_to_best_2_single(
     best: np.ndarray,
     mutation_factor: float,
     pointer: int,
-    individuals: np.ndarray = None,
+    individuals: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     if individuals is None:
         individuals = generate_random_individuals(population.shape[0], 5, pointer)
@@ -247,7 +250,7 @@ def cur_to_best_1_single(
     best: np.ndarray,
     mutation_factor: float,
     pointer: int,
-    individuals: np.ndarray = None,
+    individuals: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     if individuals is None:
         individuals = generate_random_individuals(population.shape[0], 2, pointer)
@@ -280,7 +283,7 @@ def cur_to_best_2_single(
     best: np.ndarray,
     mutation_factor: float,
     pointer: int,
-    individuals: np.ndarray = None,
+    individuals: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     if individuals is None:
         individuals = generate_random_individuals(population.shape[0], 4, pointer)
@@ -316,11 +319,16 @@ def cur_to_best_2(
 
 
 def cur_to_rand_1_single(
-    x: np.ndarray, mutation_factor: float, pointer: int, r: np.ndarray = None
+    x: np.ndarray,
+    mutation_factor: float,
+    pointer: int,
+    individuals: Optional[np.ndarray] = None,
 ) -> np.ndarray:
-    if r is None:
-        r = generate_random_individuals(x.shape[0], 3, pointer)
-    return x[pointer] + mutation_factor * (x[r[0]] - x[pointer] + x[r[1]] - x[r[2]])
+    if individuals is None:
+        individuals = generate_random_individuals(x.shape[0], 3, pointer)
+    return x[pointer] + mutation_factor * (
+        x[individuals[0]] - x[pointer] + x[individuals[1]] - x[individuals[2]]
+    )
 
 
 def cur_to_rand_1(
@@ -335,12 +343,20 @@ def cur_to_rand_1(
 
 
 def cur_to_rand_2_single(
-    x: np.ndarray, mutation_factor: float, pointer: int, r: np.ndarray = None
+    x: np.ndarray,
+    mutation_factor: float,
+    pointer: int,
+    individuals: Optional[np.ndarray] = None,
 ) -> np.ndarray:
-    if r is None:
-        r = generate_random_individuals(x.shape[0], 5, pointer)
+    if individuals is None:
+        individuals = generate_random_individuals(x.shape[0], 5, pointer)
     return x[pointer] + mutation_factor * (
-        x[r[0]] - x[pointer] + x[r[1]] - x[r[2]] + x[r[3]] - x[r[4]]
+        x[individuals[0]]
+        - x[pointer]
+        + x[individuals[1]]
+        - x[individuals[2]]
+        + x[individuals[3]]
+        - x[individuals[4]]
     )
 
 
@@ -349,7 +365,12 @@ def cur_to_rand_2(
 ) -> np.ndarray:
     if isinstance(mutation_factor, np.ndarray) and mutation_factor.ndim == 1:
         mutation_factor = mutation_factor.reshape(-1, 1)
-    r = generate_mutation_matrix(x.shape[0], 5)
+    individuals = generate_mutation_matrix(x.shape[0], 5)
     return x + mutation_factor * (
-        x[r[:, 0]] - x + x[r[:, 1]] - x[r[:, 2]] - x[r[:, 3]] + x[r[:, 4]]
+        x[individuals[:, 0]]
+        - x
+        + x[individuals[:, 1]]
+        - x[individuals[:, 2]]
+        - x[individuals[:, 3]]
+        + x[individuals[:, 4]]
     )

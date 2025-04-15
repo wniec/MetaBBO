@@ -1,6 +1,6 @@
+from __future__ import annotations
 import math
 from typing import Self
-
 from problem.basic_problem import Basic_Problem
 import numpy as np
 import torch
@@ -1268,7 +1268,7 @@ class BBOBDataset(Dataset):
     def __len__(self):
         return self.N
 
-    def __add__(self, other: "BBOBDataset"):
+    def __add__(self, other: BBOBDataset):
         return BBOBDataset(self.data + other.data, self.batch_size)
 
     def shuffle(self):

@@ -22,9 +22,9 @@ class RLEPSO_Optimizer(Learnable_Optimizer):
         self.__population_size = config.NP
 
         indices = torch.range(0, end=self.__population_size - 1)
-        self.__pci = 0.05 + 0.45 * torch.exp(10 * indices / (self.__population_size - 1)) / (
-            np.exp(10) - 1
-        )
+        self.__pci = 0.05 + 0.45 * torch.exp(
+            10 * indices / (self.__population_size - 1)
+        ) / (np.exp(10) - 1)
 
         self.__n_group = 5
 
@@ -41,7 +41,9 @@ class RLEPSO_Optimizer(Learnable_Optimizer):
     def init_population(self, problem):
         rand_pos = torch.tensor(
             np.random.uniform(
-                low=problem.lb, high=problem.ub, size=(self.__population_size, self.__dim)
+                low=problem.lb,
+                high=problem.ub,
+                size=(self.__population_size, self.__dim),
             )
         )
         self.__max_velocity = 0.1 * (problem.ub - problem.lb)
@@ -54,18 +56,18 @@ class RLEPSO_Optimizer(Learnable_Optimizer):
         )
         self.function_evaluations = 0
 
-        c_cost = self.__get_costs(problem, rand_pos)  # ps
+        current_cost = self.__get_costs(problem, rand_pos)  # ps
 
-        gbest_val = c_cost.min()
-        gbest_index = c_cost.argmin()
+        gbest_val = current_cost.min()
+        gbest_index = current_cost.argmin()
         gbest_position = rand_pos[gbest_index]
-        self.__max_cost = c_cost.max()
+        self.__max_cost = current_cost.max()
 
         self.__particles: dict[str, torch.Tensor] = {
             "current_position": rand_pos.clone(),  # ps, dim
-            "c_cost": c_cost.clone(),  # ps
+            "c_cost": current_cost.clone(),  # ps
             "pbest_position": rand_pos.clone(),  # ps, dim
-            "pbest": c_cost.clone(),  # ps
+            "pbest": current_cost.clone(),  # ps
             "gbest_position": gbest_position.clone(),  # dim
             "gbest_val": gbest_val,  # 1
             "velocity": random_velocity.clone(),  # ps,dim
@@ -99,7 +101,9 @@ class RLEPSO_Optimizer(Learnable_Optimizer):
     def __tournament_selection(self) -> torch.Tensor:
         nsel = 2
         rand_index = torch.randint(
-            low=0, high=self.__population_size, size=(self.__population_size, self.__dim, nsel)
+            low=0,
+            high=self.__population_size,
+            size=(self.__population_size, self.__dim, nsel),
         )
 
         candidate = self.__particles["pbest_position"][
@@ -120,9 +124,9 @@ class RLEPSO_Optimizer(Learnable_Optimizer):
             - pos[:, None, :].repeat_interleave(self.__population_size, dim=1)
         )
         fitness = self.__particles["pbest"]
-        fitness_delta = fitness[None, :].repeat_interleave(self.__population_size, dim=0) - fitness[
-            :, None
-                                                                                            ].repeat_interleave(self.__population_size, dim=1)
+        fitness_delta = fitness[None, :].repeat_interleave(
+            self.__population_size, dim=0
+        ) - fitness[:, None].repeat_interleave(self.__population_size, dim=1)
         fdr = (fitness_delta[:, :, None]) / (distance_per_dim + 1e-5)
         target_index = fdr.argmin(dim=1)
 
@@ -171,7 +175,9 @@ class RLEPSO_Optimizer(Learnable_Optimizer):
             return
         rand_pos = torch.tensor(
             np.random.uniform(
-                low=problem.lb, high=problem.ub, size=(self.__population_size, self.__dim)
+                low=problem.lb,
+                high=problem.ub,
+                size=(self.__population_size, self.__dim),
             )
         )
         rand_vel = torch.tensor(
@@ -218,7 +224,9 @@ class RLEPSO_Optimizer(Learnable_Optimizer):
         self.__particles = new_particles
 
     def __get_state(self) -> torch.Tensor:
-        return torch.tensor([self.function_evaluations / self.__max_function_evaluations])
+        return torch.tensor(
+            [self.function_evaluations / self.__max_function_evaluations]
+        )
 
     def update(self, action, problem) -> tuple[torch.Tensor, int, bool]:
         is_end = False
@@ -324,7 +332,10 @@ class RLEPSO_Optimizer(Learnable_Optimizer):
         if problem.optimum is None:
             is_end = self.function_evaluations >= self.__max_function_evaluations
         else:
-            is_end = self.function_evaluations >= self.__max_function_evaluations or self.__particles["gbest_val"] <= 1e-8
+            is_end = (
+                self.function_evaluations >= self.__max_function_evaluations
+                or self.__particles["gbest_val"] <= 1e-8
+            )
 
         # cal the reward
         if self.__particles["gbest_val"] < previous_gbest:

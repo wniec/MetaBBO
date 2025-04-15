@@ -85,21 +85,17 @@ class RLEPSO_Agent(Basic_Agent):
         config.n_step = 10
         config.K_epochs = 3
         config.eps_clip = 0.1
-        config.gamma = 0.999
+        config.discount_factor = 0.999
         config.max_sigma = 0.7
         config.min_sigma = 0.01
         config.lr = 1e-5
-        # config.lr_decay=0.99
         self.__config = config
 
         self.__device = self.__config.device
-        # figure out the actor
         self.__actor = Actor(config).to(self.__device)
 
-        # figure out the critic
         self.__critic = Critic(config).to(self.__device)
 
-        # figure out the optimizer
         self.__optimizer_actor = torch.optim.Adam(
             [{"params": self.__actor.parameters(), "lr": config.lr}]
         )
@@ -129,7 +125,137 @@ class RLEPSO_Agent(Basic_Agent):
         self.__config.save_interval = config.save_interval
         self.__cur_checkpoint = 1
 
-    def train_episode(self, env):
+    def train_mini_epochs(
+        self,
+        env,
+        rollout_length,
+        state,
+        entropy,
+        baseline_values,
+        baseline_values_detached,
+        memory,
+    ):
+        config = self.__config
+        # params for training
+        discount_factor = config.discount_factor
+        k_epochs = config.K_epochs
+        eps_clip = config.eps_clip
+        rewards_sum = 0
+        old_actions = torch.stack(memory.actions)
+        old_states = torch.stack(memory.states).detach()
+        old_log_probabilities = torch.stack(memory.logprobs).detach().view(-1)
+
+        # Optimize PSO policy for K mini-epochs:
+        old_value = None
+        for epoch in range(k_epochs):
+            if epoch > 0:
+                # Evaluating old actions and values :
+                log_probabilities = []
+                entropy = []
+                baseline_values_detached = []
+                baseline_values = []
+
+                for old_action, old_state in list(zip(old_actions, old_states))[
+                    :rollout_length
+                ]:
+                    # get new action_prob
+                    _, action_log_probability, policy_entropy = self.__actor(
+                        old_state,
+                        fixed_action=old_action,
+                        require_entropy=True,  # take same action
+                    )
+                    log_probabilities.append(action_log_probability)
+                    entropy.append(policy_entropy.detach().cpu())
+
+                    critic_output_detached, critic_output = self.__critic(old_state)
+                    baseline_values_detached.append(critic_output_detached)
+                    baseline_values.append(critic_output)
+
+            else:
+                log_probabilities = memory.logprobs
+
+            log_probabilities = torch.stack(log_probabilities).view(-1)
+            entropy = torch.stack(entropy).view(-1)
+            baseline_values_detached = torch.stack(baseline_values_detached).view(-1)
+            baseline_values = torch.stack(baseline_values).view(-1)
+
+            # get target value for critic
+            returns = []
+            # get next value
+            return_value = self.__critic(state)[0]
+
+            return_value.clone()
+            for r in reversed(memory.rewards):
+                return_value = return_value * discount_factor + r
+                returns.append(return_value)
+            # clip the target:
+            returns = torch.stack(returns[::-1], 0)
+            returns = returns.view(-1)
+
+            # Finding the ratio (pi_theta / pi_theta__old):
+            ratios = torch.exp(log_probabilities - old_log_probabilities.detach())
+
+            # Finding Surrogate Loss:
+            advantages = returns - baseline_values_detached
+
+            surrogate_loss1 = ratios * advantages
+            surrogate_loss2 = (
+                torch.clamp(ratios, 1 - eps_clip, 1 + eps_clip) * advantages
+            )
+            reinforce_loss = -torch.min(surrogate_loss1, surrogate_loss2).mean()
+
+            # define baseline loss
+            if old_value is None:
+                baseline_loss = ((baseline_values - returns) ** 2).mean()
+                old_value = baseline_values.detach()
+            else:
+                v_pred_clipped = old_value + torch.clamp(
+                    baseline_values - old_value, -eps_clip, eps_clip
+                )
+                v_max = torch.max(
+                    ((baseline_values - returns) ** 2),
+                    ((v_pred_clipped - returns) ** 2),
+                )
+                baseline_loss = v_max.mean()
+
+            # check K-L divergence (for logging only)
+            approx_kl_divergence = (
+                (0.5 * (old_log_probabilities.detach() - log_probabilities) ** 2)
+                .mean()
+                .detach()
+            )
+            approx_kl_divergence[torch.isinf(approx_kl_divergence)] = 0
+
+            # update gradient step
+            self.__optimizer_actor.zero_grad()
+            self.__optimizer_critic.zero_grad()
+            baseline_loss.backward()
+            reinforce_loss.backward()
+
+            # perform gradient descent
+            self.__optimizer_actor.step()
+            self.__optimizer_critic.step()
+            self.__learning_time += 1
+
+            if self.__learning_time >= (
+                self.__config.save_interval * self.__cur_checkpoint
+            ):
+                save_class(
+                    self.__config.agent_save_dir,
+                    "checkpoint" + str(self.__cur_checkpoint),
+                    self,
+                )
+                self.__cur_checkpoint += 1
+
+            if self.__learning_time >= config.max_learning_step:
+                return self.__learning_time >= config.max_learning_step, {
+                    "normalizer": env.optimizer.cost[0],
+                    "gbest": env.optimizer.cost[-1],
+                    "return": rewards_sum,
+                    "learn_steps": self.__learning_time,
+                }
+
+    def train_episode(self, env: "PBO_Env"):
         config = self.__config
         # setup
         memory = Memory()
@@ -138,23 +264,20 @@ class RLEPSO_Agent(Basic_Agent):
         state = torch.FloatTensor(state).to(self.__device)
 
         # params for training
-        discount_factor = config.gamma
-        n_step = config.n_step
-        K_epochs = config.K_epochs
-        eps_clip = config.eps_clip
+        n_steps = config.n_step
 
-        t = 0
+        timestep = 0
         rewards_sum = 0
         # initial_cost = obj
-        is_done = False
+        done = False
         # sample trajectory
-        while not is_done:
-            t_s = t
+        while not done:
+            step_start = timestep
             entropy = []
             baseline_values_detached = []
             baseline_values = []
 
-            while t - t_s < n_step:
+            while timestep - step_start < n_steps:
                 memory.states.append(state.clone())
 
                 # get model output
@@ -174,141 +297,28 @@ class RLEPSO_Agent(Basic_Agent):
                 baseline_values.append(critic_output)
 
                 # state transient
-                next_state, rewards, is_done = env.step(action)
+                next_state, rewards, done = env.step(action)
                 rewards_sum += rewards
                 memory.rewards.append(torch.FloatTensor([rewards]).to(config.device))
 
                 # next
-                t += 1
+                timestep += 1
                 state = next_state
                 state = torch.FloatTensor(state).to(config.device)
-                if is_done:
+                if done:
                     break
 
             # store info
-            t_time = t - t_s
-
-            # begin update        =======================
-
-            old_actions = torch.stack(memory.actions)
-            old_states = torch.stack(memory.states).detach()
-
-            old_logprobs = torch.stack(memory.logprobs).detach().view(-1)
-
-            # Optimize PPO policy for K mini-epochs:
-            old_value = None
-            for _k in range(K_epochs):
-                if _k == 0:
-                    log_probsabilities = memory.logprobs
-
-                else:
-                    # Evaluating old actions and values :
-                    log_probsabilities = []
-                    entropy = []
-                    baseline_values_detached = []
-                    baseline_values = []
-
-                    for tt in range(t_time):
-                        # get new action_prob
-                        _, action_log_probability, policy_entropy = self.__actor(
-                            old_states[tt],
-                            fixed_action=old_actions[tt],
-                            require_entropy=True,  # take same action
-                        )
-
-                        log_probsabilities.append(action_log_probability)
-                        entropy.append(policy_entropy.detach().cpu())
-
-                        critic_output_detached, critic_output = self.__critic(
-                            old_states[tt]
-                        )
-
-                        baseline_values_detached.append(critic_output_detached)
-                        baseline_values.append(critic_output)
-
-                log_probsabilities = torch.stack(log_probsabilities).view(-1)
-                entropy = torch.stack(entropy).view(-1)
-                baseline_values_detached = torch.stack(baseline_values_detached).view(
-                    -1
-                )
-                baseline_values = torch.stack(baseline_values).view(-1)
-
-                # get target value for critic
-                returns = []
-                # get next value
-                reward = self.__critic(state)[0]
-
-                reward.clone()
-                for r in reversed(memory.rewards):
-                    reward = reward * discount_factor + r
-                    returns.append(reward)
-                # clip the target:
-                returns = torch.stack(returns[::-1], 0)
-                returns = returns.view(-1)
-
-                # Finding the ratio (pi_theta / pi_theta__old):
-                ratios = torch.exp(log_probsabilities - old_logprobs.detach())
-
-                # Finding Surrogate Loss:
-                advantages = returns - baseline_values_detached
-
-                surr1 = ratios * advantages
-                surr2 = torch.clamp(ratios, 1 - eps_clip, 1 + eps_clip) * advantages
-                reinforce_loss = -torch.min(surr1, surr2).mean()
-
-                # define baseline loss
-                if old_value is None:
-                    baseline_loss = ((baseline_values - returns) ** 2).mean()
-                    old_value = baseline_values.detach()
-                else:
-                    vpredclipped = old_value + torch.clamp(
-                        baseline_values - old_value, -eps_clip, eps_clip
-                    )
-                    v_max = torch.max(
-                        ((baseline_values - returns) ** 2),
-                        ((vpredclipped - returns) ** 2),
-                    )
-                    baseline_loss = v_max.mean()
-
-                # check K-L divergence (for logging only)
-                approx_kl_divergence = (
-                    (0.5 * (old_logprobs.detach() - log_probsabilities) ** 2).mean().detach()
-                )
-                approx_kl_divergence[torch.isinf(approx_kl_divergence)] = 0
-                # calculate loss
-                baseline_loss + reinforce_loss
-
-                # update gradient step
-                # agent.optimizer.zero_grad()
-                self.__optimizer_actor.zero_grad()
-                self.__optimizer_critic.zero_grad()
-                baseline_loss.backward()
-                reinforce_loss.backward()
-                # loss.backward()
-
-                # perform gradient descent
-                self.__optimizer_actor.step()
-                self.__optimizer_critic.step()
-                self.__learning_time += 1
-
-                if self.__learning_time >= (
-                    self.__config.save_interval * self.__cur_checkpoint
-                ):
-                    save_class(
-                        self.__config.agent_save_dir,
-                        "checkpoint" + str(self.__cur_checkpoint),
-                        self,
-                    )
-                    self.__cur_checkpoint += 1
-
-                if self.__learning_time >= config.max_learning_step:
-                    return self.__learning_time >= config.max_learning_step, {
-                        "normalizer": env.optimizer.cost[0],
-                        "gbest": env.optimizer.cost[-1],
-                        "return": rewards_sum,
-                        "learn_steps": self.__learning_time,
-                    }
-
+            rollout_length = timestep - step_start
+            self.train_mini_epochs(
+                env,
+                rollout_length,
+                state,
+                entropy,
+                baseline_values,
+                baseline_values_detached,
+                memory,
+            )
             memory.clear_memory()
         return self.__learning_time >= config.max_learning_step, {
             "normalizer": env.optimizer.cost[0],

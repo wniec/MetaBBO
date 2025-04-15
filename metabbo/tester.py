@@ -15,7 +15,7 @@ from optimizer.random_search import Random_search
 from optimizer.rlepso_optimizer import RLEPSO_Optimizer  # noqa 403
 
 
-def calculate_time_0(dim, fes):
+def calculate_time_0(dim, fes) -> float:
     T0 = 0
     for i in range(10):
         start = time.perf_counter()
@@ -33,7 +33,7 @@ def calculate_time_0(dim, fes):
     return T0 / 10
 
 
-def calculate_time_1(problem, dim, fes):
+def calculate_time_1(problem, dim, fes) -> float:
     T1 = 0
     for i in range(10):
         x = np.random.rand(fes, dim)
