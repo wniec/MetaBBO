@@ -30,7 +30,7 @@ class Trainer(object):
         self.optimizer = eval(config.train_optimizer)(config)
         self.train_set, self.test_set = construct_problem_set(config)
 
-    def save_log(self, epochs, steps, cost, returns, normalizer):
+    def save_log(self, epochs, steps, cost, returns, normalizer) -> None:
         log_dir = (
             self.config.log_dir
             + f"/train/{self.agent.__class__.__name__}/{self.config.run_time}/log/"
@@ -49,7 +49,7 @@ class Trainer(object):
             cost_save = np.stack((epochs, cost[name], normalizer[name]), 0)
             np.save(log_dir + name + "_cost", cost_save)
 
-    def draw_cost(self, Name=None, normalize=False):
+    def draw_cost(self, Name=None, normalize=False) -> None:
         log_dir = (
             self.config.log_dir
             + f"/train/{self.agent.__class__.__name__}/{self.config.run_time}/"
@@ -75,7 +75,7 @@ class Trainer(object):
             plt.savefig(log_dir + f"pic/{name}_cost.png")
             plt.close()
 
-    def draw_average_cost(self, normalize=True):
+    def draw_average_cost(self, normalize=True) -> None:
         log_dir = (
             self.config.log_dir
             + f"/train/{self.agent.__class__.__name__}/{self.config.run_time}/"
@@ -100,7 +100,7 @@ class Trainer(object):
         plt.savefig(log_dir + "pic/all_problem_cost.png")
         plt.close()
 
-    def draw_return(self):
+    def draw_return(self) -> None:
         log_dir = (
             self.config.log_dir
             + f"/train/{self.agent.__class__.__name__}/{self.config.run_time}/"
@@ -114,7 +114,7 @@ class Trainer(object):
         plt.savefig(log_dir + "pic/return.png")
         plt.close()
 
-    def train(self):
+    def train(self) -> None:
         print(f"start training: {self.config.run_time}")
         exceed_max_ls = False
         epoch = 0

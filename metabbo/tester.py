@@ -1,4 +1,6 @@
 import copy
+from itertools import product
+
 from utils import construct_problem_set
 import numpy as np
 import pickle
@@ -13,7 +15,7 @@ from optimizer.random_search import Random_search
 from optimizer.rlepso_optimizer import RLEPSO_Optimizer  # noqa 403
 
 
-def cal_t0(dim, fes):
+def calculate_time_0(dim, fes):
     T0 = 0
     for i in range(10):
         start = time.perf_counter()
@@ -31,7 +33,7 @@ def cal_t0(dim, fes):
     return T0 / 10
 
 
-def cal_t1(problem, dim, fes):
+def calculate_time_1(problem, dim, fes):
     T1 = 0
     for i in range(10):
         x = np.random.rand(fes, dim)
@@ -134,7 +136,7 @@ class Tester(object):
     def test(self):
         print(f"start testing: {self.config.run_time}")
         # calculate T0
-        T0 = cal_t0(self.config.dim, self.config.maxFEs)
+        T0 = calculate_time_0(self.config.dim, self.config.maxFEs)
         self.test_results["T0"] = T0
         pbar_len = (
             (len(self.t_optimizer_for_cp) + len(self.agent_for_cp))
@@ -239,9 +241,6 @@ class Tester(object):
 def rollout(config):
     print(f"start rollout: {config.run_time}")
 
-    if config.problem[-6:] == "-torch":
-        config.problem = config.problem[:-6]
-
     train_set, _ = construct_problem_set(config)
 
     agent_load_dir = config.agent_load_dir
@@ -254,14 +253,9 @@ def rollout(config):
     load_agents = {}
     for agent_name in agent_for_rollout:
         load_agents[agent_name] = []
-        for checkpoint in range(0, n_checkpoint + 1):
-            file_path = (
-                agent_load_dir
-                + agent_name
-                + "/"
-                + "checkpoint"
-                + str(checkpoint)
-                + ".pkl"
+        for checkpoint in range(n_checkpoint + 1):
+            file_path = os.path.join(
+                agent_load_dir + agent_name, f"checkpoint{checkpoint}.pkl"
             )
             with open(file_path, "rb") as f:
                 load_agents[agent_name].append(pickle.load(f))
@@ -286,43 +280,43 @@ def rollout(config):
 
     pbar_len = (len(agent_for_rollout)) * train_set.N * (n_checkpoint + 1) * 5
     with tqdm(range(pbar_len), desc="Rollouting") as pbar:
-        for agent_name, optimizer in zip(agent_for_rollout, optimizer_for_rollout):
-            agent = None
-            for checkpoint in range(0, n_checkpoint + 1):
-                agent = load_agents[agent_name][checkpoint]
-                for i, problem in enumerate(train_set):
-                    for run in range(5):
-                        np.random.seed(run)
+        for (agent_name, optimizer), checkpoint in product(
+            zip(agent_for_rollout, optimizer_for_rollout), range(n_checkpoint + 1)
+        ):
+            agent = load_agents[agent_name][checkpoint]
+            for i, problem in enumerate(train_set):
+                for run in range(5):
+                    np.random.seed(run)
 
-                        env = PBO_Env(problem, optimizer)
+                    env = PBO_Env(problem, optimizer)
 
-                        info = agent.rollout_episode(env)
-                        cost = info["cost"]
-                        while len(cost) < 51:
-                            cost.append(cost[-1])
-                        fes = info["fes"]
-                        R = info["return"]
+                    info = agent.rollout_episode(env)
+                    cost = info["cost"]
+                    while len(cost) < 51:
+                        cost.append(cost[-1])
+                    fes = info["fes"]
+                    R = info["return"]
 
-                        train_rollout_results["cost"][problem.__str__()][agent_name][
-                            checkpoint
-                        ].append(cost)
-                        train_rollout_results["fes"][problem.__str__()][agent_name][
-                            checkpoint
-                        ].append(fes)
-                        train_rollout_results["return"][problem.__str__()][agent_name][
-                            checkpoint
-                        ].append(R)
+                    train_rollout_results["cost"][problem.__str__()][agent_name][
+                        checkpoint
+                    ].append(cost)
+                    train_rollout_results["fes"][problem.__str__()][agent_name][
+                        checkpoint
+                    ].append(fes)
+                    train_rollout_results["return"][problem.__str__()][agent_name][
+                        checkpoint
+                    ].append(R)
 
-                        pbar_info = {
-                            "problem": problem.__str__(),
-                            "agent": type(agent).__name__,
-                            "checkpoint": checkpoint,
-                            "run": run,
-                            "cost": cost[-1],
-                            "fes": fes,
-                        }
-                        pbar.set_postfix(pbar_info)
-                        pbar.update(1)
+                    pbar_info = {
+                        "problem": problem.__str__(),
+                        "agent": type(agent).__name__,
+                        "checkpoint": checkpoint,
+                        "run": run,
+                        "cost": cost[-1],
+                        "fes": fes,
+                    }
+                    pbar.set_postfix(pbar_info)
+                    pbar.update(1)
 
     log_dir = config.rollout_log_dir
     if not os.path.exists(log_dir):
@@ -351,7 +345,7 @@ def test_for_random_search(config):
             type(optimizer).__name__
         ] = []  # 51 scalars
     # calculate T0
-    test_results["T0"] = cal_t0(config.dim, config.maxFEs)
+    test_results["T0"] = calculate_time_0(config.dim, config.maxFEs)
     # begin testing
     seed = range(51)
     pbar_len = len(entire_set) * 51
@@ -392,12 +386,12 @@ def test_for_random_search(config):
     return test_results
 
 
-def name_translate(problem):
-    if problem in ["bbob", "bbob-torch"]:
+def name_translate(problem: str) -> str:
+    if problem == "bbob":
         return "Synthetic"
-    elif problem in ["bbob-noisy", "bbob-noisy-torch"]:
+    elif problem == "bbob-noisy":
         return "Noisy-Synthetic"
-    elif problem in ["protein", "protein-torch"]:
+    elif problem == "protein":
         return "Protein-Docking"
     else:
         raise ValueError(problem + " is not defined!")
@@ -427,7 +421,7 @@ def mgd_test(config):
             test_results["cost"][problem.__str__()][agent_name] = []  # 51 np.arrays
             test_results["fes"][problem.__str__()][agent_name] = []  # 51 scalars
     # calculate T0
-    test_results["T0"] = cal_t0(config.dim, config.maxFEs)
+    test_results["T0"] = calculate_time_0(config.dim, config.maxFEs)
     # begin mgd_test
     seed = range(51)
     pbar_len = len(agent_name_list) * len(test_set) * 51
@@ -486,80 +480,63 @@ def mgd_test(config):
     )
 
 
+# preprocess data for agent
+def preprocess(file, agent):
+    print(file, agent)
+    with open(file, "rb") as f:
+        data = pickle.load(f)
+    # aggregate all problem's data together
+    returns = data["return"]
+    results = None
+    for i, problem in enumerate(returns.keys()):
+        if i == 0:
+            results = np.array(returns[problem][agent])
+        else:
+            results = np.concatenate(
+                [results, np.array(returns[problem][agent])], axis=1
+            )
+    return np.array(results)
+
+
 def mte_test(config):
     print(f"start MTE_test: {config.run_time}")
     pre_train_file = config.pre_train_rollout
     scratch_file = config.scratch_rollout
     agent = config.agent
-    min_max = False
-
-    # preprocess data for agent
-    def preprocess(file, agent):
-        with open(file, "rb") as f:
-            data = pickle.load(f)
-        # aggregate all problem's data together
-        returns = data["return"]
-        results = None
-        i = 0
-        for problem in returns.keys():
-            if i == 0:
-                results = np.array(returns[problem][agent])
-            else:
-                results = np.concatenate(
-                    [results, np.array(returns[problem][agent])], axis=1
-                )
-            i += 1
-        return np.array(results)
-
     bbob_data = preprocess(pre_train_file, agent)
     noisy_data = preprocess(scratch_file, agent)
     # calculate min_max avg
-    temp = np.concatenate([bbob_data, noisy_data], axis=1)
-    if min_max:
-        temp_ = (temp - temp.min(-1)[:, None]) / (
-            temp.max(-1)[:, None] - temp.min(-1)[:, None]
-        )
-    else:
-        temp_ = temp
-    bd, nd = temp_[:, :90], temp_[:, 90:]
-    checkpoints = np.hsplit(bd, 18)
-    g = []
-    for i in range(18):
-        g.append(checkpoints[i].tolist())
-    checkpoints = np.array(g)
-    avg = bd.mean(-1)
-    avg = savgol_filter(avg, 13, 5)
-    std = np.mean(np.std(checkpoints, -1), 0) / np.sqrt(5)
-    checkpoints = np.hsplit(nd, 18)
-    g = []
-    for i in range(18):
-        g.append(checkpoints[i].tolist())
-    checkpoints = np.array(g)
-    std_ = np.mean(np.std(checkpoints, -1), 0) / np.sqrt(5)
-    avg_ = nd.mean(-1)
-    avg_ = savgol_filter(avg_, 13, 5)
+    checkpoints = np.hsplit(bbob_data, 18)
+    checkpoints = np.array([checkpoint.tolist() for checkpoint in checkpoints])
+    avg_bbob = bbob_data.mean(axis=-1)
+    avg_bbob = savgol_filter(avg_bbob, 13, 5)
+    std_bbob = np.mean(np.std(checkpoints, -1), 0) / np.sqrt(5)
+
+    checkpoints = np.hsplit(noisy_data, 18)
+    checkpoints = np.array([checkpoint.tolist() for checkpoint in checkpoints])
+
+    std_noisy = np.mean(np.std(checkpoints, -1), 0) / np.sqrt(5)
+    avg_noisy = noisy_data.mean(-1)
+    avg_noisy = savgol_filter(avg_noisy, 13, 5)
     plt.figure(figsize=(40, 15))
     plt.subplot(1, 3, (2, 3))
     x = np.arange(21)
     x = (1.5e6 / x[-1]) * x
     idx = 21
-    smooth = 1
     s = np.zeros(21)
-    a = s[0] = avg[0]
-    norm = smooth + 1
+    a = s[0] = avg_bbob[0]
+    norm = 2
     for i in range(1, 21):
-        a = a * smooth + avg[i]
-        s[i] = a / norm if norm > 0 else a
-        norm *= smooth
+        a = a + avg_bbob[i]
+        s[i] = a / norm
         norm += 1
 
     s_ = np.zeros(21)
-    a = s_[0] = avg_[0]
-    norm = smooth + 1
+    a = s_[0] = avg_noisy[0]
+    norm = 2
     for i in range(1, 21):
-        a = a * smooth + avg_[i]
-        s_[i] = a / norm if norm > 0 else a
-        norm *= smooth
+        a = a + avg_noisy[i]
+        s_[i] = a / norm
         norm += 1
     plt.plot(
         x[:idx],
@@ -572,7 +549,11 @@ def mte_test(config):
         linewidth=5,
     )
     plt.fill_between(
-        x[:idx], s[:idx] - std[:idx], s[:idx] + std[:idx], alpha=0.2, facecolor="blue"
+        x[:idx],
+        s[:idx] - std_bbob[:idx],
+        s[:idx] + std_bbob[:idx],
+        alpha=0.2,
+        facecolor="blue",
     )
     plt.plot(
         x[:idx],
@@ -586,8 +567,8 @@ def mte_test(config):
     )
     plt.fill_between(
         x[:idx],
-        s_[:idx] - std_[:idx],
-        s_[:idx] + std_[:idx],
+        s_[:idx] - std_noisy[:idx],
+        s_[:idx] + std_noisy[:idx],
         alpha=0.2,
         facecolor="red",
     )

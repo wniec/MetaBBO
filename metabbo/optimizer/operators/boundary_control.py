@@ -4,72 +4,86 @@ from typing import Union, Iterable
 
 def clipping(
     x: Union[np.ndarray, Iterable],
-    lb: Union[np.ndarray, Iterable, int, float, None],
-    ub: Union[np.ndarray, Iterable, int, float, None],
+    lower_boundary: Union[np.ndarray, Iterable, int, float, None],
+    upper_boundary: Union[np.ndarray, Iterable, int, float, None],
 ) -> np.ndarray:
-    return np.clip(x, lb, ub)
+    return np.clip(x, lower_boundary, upper_boundary)
 
 
 def random(
     x: Union[np.ndarray, Iterable],
-    lb: Union[np.ndarray, Iterable, int, float],
-    ub: Union[np.ndarray, Iterable, int, float],
+    lower_bound: Union[np.ndarray, Iterable, int, float],
+    upper_bound: Union[np.ndarray, Iterable, int, float],
 ) -> np.ndarray:
     if not isinstance(x, np.ndarray):
         x = np.array(x)
-    if not isinstance(ub, np.ndarray):
-        ub = np.array(ub)
-    cro_bnd = (x < lb) | (x > ub)
-    return ~cro_bnd * x + cro_bnd * (np.random.rand(*x.shape) * (ub - lb) + lb)
+    if not isinstance(upper_bound, np.ndarray):
+        upper_bound = np.array(upper_bound)
+    outside_boundary = (x < lower_bound) or (x > upper_bound)
+    return int(outside_boundary) * x + outside_boundary * (
+        np.random.rand(*x.shape) * (upper_bound - lower_bound) + lower_bound
+    )
 
 
 def reflection(
     x: Union[np.ndarray, Iterable],
-    lb: Union[np.ndarray, Iterable, int, float],
-    ub: Union[np.ndarray, Iterable, int, float],
+    lower_bound: Union[np.ndarray, Iterable, int, float],
+    upper_bound: Union[np.ndarray, Iterable, int, float],
 ) -> np.ndarray:
     if not isinstance(x, np.ndarray):
         x = np.array(x)
-    cro_lb = x < lb
-    cro_ub = x > ub
-    no_cro = ~(cro_lb | cro_ub)
-    return no_cro * x + cro_lb * (2 * lb - x) + cro_ub * (2 * ub - x)
+    under_lower_bound = x < lower_bound
+    over_upper_bound = x > upper_bound
+    in_bounds = not (under_lower_bound or over_upper_bound)
+    return (
+        in_bounds * x
+        + under_lower_bound * (2 * lower_bound - x)
+        + over_upper_bound * (2 * upper_bound - x)
+    )
 
 
 def periodic(
     x: Union[np.ndarray, Iterable],
-    lb: Union[np.ndarray, Iterable, int, float],
-    ub: Union[np.ndarray, Iterable, int, float],
+    lower_bound: Union[np.ndarray, Iterable, int, float],
+    upper_bound: Union[np.ndarray, Iterable, int, float],
 ) -> np.ndarray:
-    if not isinstance(ub, np.ndarray):
-        ub = np.array(ub)
-    return (x - ub) % (ub - lb) + lb
+    if not isinstance(upper_bound, np.ndarray):
+        upper_bound = np.array(upper_bound)
+    return (x - upper_bound) % (upper_bound - lower_bound) + lower_bound
 
 
 def halving(
     x: Union[np.ndarray, Iterable],
-    lb: Union[np.ndarray, Iterable, int, float],
-    ub: Union[np.ndarray, Iterable, int, float],
+    lower_bound: Union[np.ndarray, Iterable, int, float],
+    upper_bound: Union[np.ndarray, Iterable, int, float],
 ) -> np.ndarray:
     if not isinstance(x, np.ndarray):
         x = np.array(x)
-    cro_lb = x < lb
-    cro_ub = x > ub
-    no_cro = ~(cro_lb | cro_ub)
-    return no_cro * x + cro_lb * (x + lb) / 2 + cro_ub * (x + ub) / 2
+    under_lower_bound = x < lower_bound
+    over_upper_bound = x > upper_bound
+    in_bounds = not (under_lower_bound or over_upper_bound)
+    return (
+        in_bounds * x
+        + under_lower_bound * (x + lower_bound) / 2
+        + over_upper_bound * (x + upper_bound) / 2
+    )
 
 
 def parent(
     x: Union[np.ndarray, Iterable],
-    lb: Union[np.ndarray, Iterable, int, float],
-    ub: Union[np.ndarray, Iterable, int, float],
-    par: Union[np.ndarray, Iterable],
+    lower_bound: Union[np.ndarray, Iterable, int, float],
+    upper_bound: Union[np.ndarray, Iterable, int, float],
+    parent: Union[np.ndarray, Iterable],
 ) -> np.ndarray:
     if not isinstance(x, np.ndarray):
         x = np.array(x)
-    if not isinstance(par, np.ndarray):
-        par = np.array(par)
-    cro_lb = x < lb
-    cro_ub = x > ub
-    no_cro = ~(cro_lb | cro_ub)
-    return no_cro * x + cro_lb * (par + lb) / 2 + cro_ub * (par + ub) / 2
+    if not isinstance(parent, np.ndarray):
+        parent = np.array(parent)
+    under_lower_bound = x < lower_bound
+    over_upper_bound = x > upper_bound
+    in_bounds = not (under_lower_bound or over_upper_bound)
+    return (
+        in_bounds * x
+        + under_lower_bound * (parent + lower_bound) / 2
+        + over_upper_bound * (parent + upper_bound) / 2
+    )

@@ -36,8 +36,7 @@ class Random_search(Basic_Optimizer):
         if init:
             self.gbest = cost.min()
         else:
-            if self.gbest > cost.min():
-                self.gbest = cost.min()
+            self.gbest = min(self.gbest, cost.min())
 
     def run_episode(self, problem):
         problem.reset()

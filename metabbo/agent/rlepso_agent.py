@@ -13,16 +13,21 @@ class Actor(nn.Module):
     ):
         super(Actor, self).__init__()
         net_config = [
-            {"in": config.feature_dim, "out": 64, "drop_out": 0, "activation": "ReLU"},
+            {"in": 1, "out": 64, "drop_out": 0, "activation": "ReLU"},
             {"in": 64, "out": 32, "drop_out": 0, "activation": "ReLU"},
-            {"in": 32, "out": config.action_dim, "drop_out": 0, "activation": "None"},
+            {"in": 32, "out": 35, "drop_out": 0, "activation": "None"},
         ]
         self.__mu_net = MLP(net_config)
         self.__sigma_net = MLP(net_config)
         self.__max_sigma = config.max_sigma
         self.__min_sigma = config.min_sigma
 
-    def forward(self, x_in, fixed_action=None, require_entropy=False):  # x-in: bs*gs*9
+    def forward(
+        self, x_in, fixed_action=None, require_entropy=False
+    ) -> (
+        tuple[torch.Tensor, torch.Tensor]
+        | tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+    ):  # x-in: bs*gs*9
         mu = (torch.tanh(self.__mu_net(x_in)) + 1.0) / 2.0
         sigma = (torch.tanh(self.__sigma_net(x_in)) + 1.0) / 2.0 * (
             self.__max_sigma - self.__min_sigma
@@ -34,12 +39,10 @@ class Actor(nn.Module):
             action = fixed_action
         else:
             action = torch.clamp(policy.sample(), min=0, max=1)
-        log_prob = policy.log_prob(action)
-
-        log_prob = torch.sum(log_prob)
+        log_prob: torch.Tensor = policy.log_prob(action).sum()
 
         if require_entropy:
-            entropy = policy.entropy()  # for logging only bs,ps,2
+            entropy: torch.Tensor = policy.entropy()  # for logging only bs,ps,2
 
             out = (action, log_prob, entropy)
         else:
@@ -56,7 +59,7 @@ class Critic(nn.Module):
         self.__value_head = MLP(
             [
                 {
-                    "in": config.feature_dim,
+                    "in": 1,
                     "out": 16,
                     "drop_out": 0,
                     "activation": "ReLU",
@@ -135,30 +138,27 @@ class RLEPSO_Agent(Basic_Agent):
         state = torch.FloatTensor(state).to(self.__device)
 
         # params for training
-        gamma = config.gamma
+        discount_factor = config.gamma
         n_step = config.n_step
         K_epochs = config.K_epochs
         eps_clip = config.eps_clip
 
         t = 0
-        _R = 0
+        rewards_sum = 0
         # initial_cost = obj
         is_done = False
         # sample trajectory
         while not is_done:
             t_s = t
-            total_cost = 0
             entropy = []
-            bl_val_detached = []
-            bl_val = []
+            baseline_values_detached = []
+            baseline_values = []
 
             while t - t_s < n_step:
-                # encoding the state
-
                 memory.states.append(state.clone())
 
                 # get model output
-                action, log_lh, entro_p = self.__actor(
+                action, log_lh, policy_entropy = self.__actor(
                     state,
                     require_entropy=True,
                 )
@@ -167,20 +167,16 @@ class RLEPSO_Agent(Basic_Agent):
                 action = action.cpu()
                 memory.logprobs.append(log_lh)
 
-                entropy.append(entro_p.detach().cpu())
+                entropy.append(policy_entropy.detach().cpu())
 
-                baseline_val_detached, baseline_val = self.__critic(state)
-                bl_val_detached.append(baseline_val_detached)
-                bl_val.append(baseline_val)
+                critic_output_detached, critic_output = self.__critic(state)
+                baseline_values_detached.append(critic_output_detached)
+                baseline_values.append(critic_output)
 
                 # state transient
                 next_state, rewards, is_done = env.step(action)
-                _R += rewards
+                rewards_sum += rewards
                 memory.rewards.append(torch.FloatTensor([rewards]).to(config.device))
-                # print('step:{},max_reward:{}'.format(t,torch.max(rewards)))
-
-                # store info
-                # total_cost = total_cost + gbest_val
 
                 # next
                 t += 1
@@ -191,11 +187,8 @@ class RLEPSO_Agent(Basic_Agent):
 
             # store info
             t_time = t - t_s
-            total_cost = total_cost / t_time
 
             # begin update        =======================
-
-            # bs, ps, dim_f = state.size()
 
             old_actions = torch.stack(memory.actions)
             old_states = torch.stack(memory.states).detach()
@@ -206,58 +199,58 @@ class RLEPSO_Agent(Basic_Agent):
             old_value = None
             for _k in range(K_epochs):
                 if _k == 0:
-                    logprobs = memory.logprobs
+                    log_probsabilities = memory.logprobs
 
                 else:
                     # Evaluating old actions and values :
-                    logprobs = []
+                    log_probsabilities = []
                     entropy = []
-                    bl_val_detached = []
-                    bl_val = []
+                    baseline_values_detached = []
+                    baseline_values = []
 
                     for tt in range(t_time):
                         # get new action_prob
-                        _, log_p, entro_p = self.__actor(
+                        _, action_log_probability, policy_entropy = self.__actor(
                             old_states[tt],
                             fixed_action=old_actions[tt],
                             require_entropy=True,  # take same action
                         )
 
-                        logprobs.append(log_p)
-                        entropy.append(entro_p.detach().cpu())
+                        log_probsabilities.append(action_log_probability)
+                        entropy.append(policy_entropy.detach().cpu())
 
-                        baseline_val_detached, baseline_val = self.__critic(
+                        critic_output_detached, critic_output = self.__critic(
                             old_states[tt]
                         )
 
-                        bl_val_detached.append(baseline_val_detached)
-                        bl_val.append(baseline_val)
+                        baseline_values_detached.append(critic_output_detached)
+                        baseline_values.append(critic_output)
 
-                logprobs = torch.stack(logprobs).view(-1)
+                log_probsabilities = torch.stack(log_probsabilities).view(-1)
                 entropy = torch.stack(entropy).view(-1)
-                bl_val_detached = torch.stack(bl_val_detached).view(-1)
-                bl_val = torch.stack(bl_val).view(-1)
+                baseline_values_detached = torch.stack(baseline_values_detached).view(
+                    -1
+                )
+                baseline_values = torch.stack(baseline_values).view(-1)
 
                 # get target value for critic
-                Reward = []
-                reward_reversed = memory.rewards[::-1]
+                returns = []
                 # get next value
-                R = self.__critic(state)[0]
+                reward = self.__critic(state)[0]
 
-                # R = agent.critic(state)[0]
-                R.clone()
-                for r in range(len(reward_reversed)):
-                    R = R * gamma + reward_reversed[r]
-                    Reward.append(R)
+                reward.clone()
+                for r in reversed(memory.rewards):
+                    reward = reward * discount_factor + r
+                    returns.append(reward)
                 # clip the target:
-                Reward = torch.stack(Reward[::-1], 0)
-                Reward = Reward.view(-1)
+                returns = torch.stack(returns[::-1], 0)
+                returns = returns.view(-1)
 
                 # Finding the ratio (pi_theta / pi_theta__old):
-                ratios = torch.exp(logprobs - old_logprobs.detach())
+                ratios = torch.exp(log_probsabilities - old_logprobs.detach())
 
                 # Finding Surrogate Loss:
-                advantages = Reward - bl_val_detached
+                advantages = returns - baseline_values_detached
 
                 surr1 = ratios * advantages
                 surr2 = torch.clamp(ratios, 1 - eps_clip, 1 + eps_clip) * advantages
@@ -265,20 +258,21 @@ class RLEPSO_Agent(Basic_Agent):
 
                 # define baseline loss
                 if old_value is None:
-                    baseline_loss = ((bl_val - Reward) ** 2).mean()
-                    old_value = bl_val.detach()
+                    baseline_loss = ((baseline_values - returns) ** 2).mean()
+                    old_value = baseline_values.detach()
                 else:
                     vpredclipped = old_value + torch.clamp(
-                        bl_val - old_value, -eps_clip, eps_clip
+                        baseline_values - old_value, -eps_clip, eps_clip
                     )
                     v_max = torch.max(
-                        ((bl_val - Reward) ** 2), ((vpredclipped - Reward) ** 2)
+                        ((baseline_values - returns) ** 2),
+                        ((vpredclipped - returns) ** 2),
                     )
                     baseline_loss = v_max.mean()
 
                 # check K-L divergence (for logging only)
                 approx_kl_divergence = (
-                    (0.5 * (old_logprobs.detach() - logprobs) ** 2).mean().detach()
+                    (0.5 * (old_logprobs.detach() - log_probsabilities) ** 2).mean().detach()
                 )
                 approx_kl_divergence[torch.isinf(approx_kl_divergence)] = 0
                 # calculate loss
@@ -311,7 +305,7 @@ class RLEPSO_Agent(Basic_Agent):
                     return self.__learning_time >= config.max_learning_step, {
                         "normalizer": env.optimizer.cost[0],
                         "gbest": env.optimizer.cost[-1],
-                        "return": _R,
+                        "return": rewards_sum,
                         "learn_steps": self.__learning_time,
                     }
 
@@ -319,17 +313,21 @@ class RLEPSO_Agent(Basic_Agent):
         return self.__learning_time >= config.max_learning_step, {
             "normalizer": env.optimizer.cost[0],
             "gbest": env.optimizer.cost[-1],
-            "return": _R,
+            "return": rewards_sum,
             "learn_steps": self.__learning_time,
         }
 
     def rollout_episode(self, env):
         is_done = False
         state = env.reset()
-        R = 0
+        reward_sum = 0
         while not is_done:
             state = torch.FloatTensor(state).to(self.__config.device)
             action = self.__actor(state)[0].cpu().numpy()
             state, reward, is_done = env.step(action)
-            R += reward
-        return {"cost": env.optimizer.cost, "fes": env.optimizer.fes, "return": R}
+            reward_sum += reward
+        return {
+            "cost": env.optimizer.cost,
+            "fes": env.optimizer.function_evaluations,
+            "return": reward_sum,
+        }

@@ -101,7 +101,6 @@ def get_average_costs(results: dict, norm: bool = False):
         agents.append(agent)
     avg_cost = {}
     std_cost = {}
-    # n_checkpoint=len(results[problems[0]][agents[0]])
     for agent in agents:
         avg_cost[agent] = []
         std_cost[agent] = []
@@ -113,15 +112,10 @@ def get_average_costs(results: dict, norm: bool = False):
             avg_cost[agent].append(np.mean(values, -1))
         avg_cost[agent] = np.mean(avg_cost[agent], 0)
         std_cost[agent] = np.mean(std_cost[agent], 0)
-        # for checkpoint in range(n_checkpoint):
-        #      return_sum=0
-        #      for problem in problems:
-        #           return_sum+=results[problem][agent][checkpoint]
-        #      avg_return[agent].append(return_sum/len(problems))
     return avg_cost, std_cost  # {'agent':[] len = n_checkpoints}
 
 
-def cal_scores1(D: dict, maxf: float):
+def cal_scores1(D: dict, maxf: float) -> float:
     SNE = []
     for agent in D.keys():
         values = D[agent]
@@ -901,7 +895,7 @@ class Logger:
                 std[key] = np.std(aei_k) / 5.0
         return mean, std
 
-    def cec_metric(self, data: dict, ignore: Optional[list] = None):
+    def cec_metric(self, data: dict, ignore: Optional[list] = None) -> dict[str, float]:
         score = {}
         M = []
         R = []

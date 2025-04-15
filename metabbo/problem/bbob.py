@@ -1,4 +1,6 @@
 import math
+from typing import Self
+
 from problem.basic_problem import Basic_Problem
 import numpy as np
 import torch
@@ -23,12 +25,12 @@ def rotate_gen(dim):  # Generate a rotate matrix
         # Householder transformation
         Hx = np.eye(dim - n + 1) - 2.0 * np.outer(x, x) / (x * x).sum()
         mat[n - 1 :, n - 1 :] = Hx
-        H = np.dot(H, mat)
+        H = H @ mat
     # Fix the last sign such that the determinant is 1
     D[-1] = (-1) ** (1 - (dim % 2)) * D.prod()
     # Equivalent to np.dot(np.diag(D), H) but faster, apparently
     H = (D * H.T).T
-    return H
+    return torch.tensor(H)
 
 
 class BBOB_Basic_Problem(Basic_Problem):
@@ -122,7 +124,7 @@ def asy_transform(x, beta):
     return y
 
 
-def pen_func(x, ub):
+def pen_func(x, ub) -> torch.Tensor:
     """
     Implementing the penalty function on decision values.
 
@@ -1180,7 +1182,7 @@ class F24(BBOB_Basic_Problem):
         )
 
 
-class BBOB_Dataset(Dataset):
+class BBOBDataset(Dataset):
     def __init__(self, data, batch_size=1):
         super().__init__()
         self.data = data
@@ -1193,7 +1195,7 @@ class BBOB_Dataset(Dataset):
     def get_datasets(
         suit,
         dim,
-        upperbound,
+        upper_bound,
         shifted=True,
         rotated=True,
         biased=True,
@@ -1201,14 +1203,14 @@ class BBOB_Dataset(Dataset):
         test_batch_size=1,
         difficulty="easy",
         instance_seed=3849,
-    ):
+    ) -> Self:
         # get functions ID of indicated suit
         if suit == "bbob":
-            func_id = [i for i in range(1, 25)]  # [1, 24]
-            small_set_func_id = [1, 5, 6, 10, 15, 20]
+            func_ids = [i for i in range(1, 25)]  # [1, 24]
+            small_set_func_ids = [1, 5, 6, 10, 15, 20]
         elif suit == "bbob-noisy":
-            func_id = [i for i in range(101, 131)]  # [101, 130]
-            small_set_func_id = [101, 105, 115, 116, 117, 119, 120, 125]
+            func_ids = [i for i in range(101, 131)]  # [101, 130]
+            small_set_func_ids = [101, 105, 115, 116, 117, 119, 120, 125]
         else:
             raise ValueError(
                 f"{suit} function suit is invalid or is not supported yet."
@@ -1220,34 +1222,36 @@ class BBOB_Dataset(Dataset):
             np.random.seed(instance_seed)
         train_set = []
         test_set = []
-        assert upperbound >= 5, "Argument upperbound must be at least 5."
-        ub = upperbound
-        lb = -upperbound
-        for id in func_id:
+        assert upper_bound >= 5, "Argument upperbound must be at least 5."
+        lower_bound = -upper_bound
+        for id in func_ids:
             if shifted:
                 shift = 0.8 * torch.tensor(
-                    np.random.random(dim) * (ub - lb) + lb, dtype=torch.float64
+                    np.random.random(dim) * (upper_bound - lower_bound) + lower_bound,
+                    dtype=torch.float64,
                 )
             else:
                 shift = torch.zeros(dim, dtype=torch.float64)
-            if rotated:
-                H = rotate_gen(dim)
-            else:
-                H = torch.eye(dim, dtype=torch.float64)
-            if biased:
-                bias = torch.tensor(np.random.randint(1, 26)) * 100
-            else:
-                bias = 0
-            instance = eval(f"F{id}")(
-                dim=dim, shift=shift, rotate=H, bias=bias, lb=lb, ub=ub
+            rotation_matrix = (
+                rotate_gen(dim) if rotated else torch.eye(dim, dtype=torch.float64)
             )
-            if (difficulty == "easy" and id not in small_set_func_id) or (
-                difficulty == "difficult" and id in small_set_func_id
+            bias = torch.tensor(np.random.randint(1, 26)) * 100 if biased else 0
+
+            instance = eval(f"F{id}")(
+                dim=dim,
+                shift=shift,
+                rotate=rotation_matrix,
+                bias=bias,
+                lb=lower_bound,
+                ub=upper_bound,
+            )
+            if (difficulty == "easy" and id not in small_set_func_ids) or (
+                difficulty == "difficult" and id in small_set_func_ids
             ):
                 train_set.append(instance)
             else:
                 test_set.append(instance)
-        return BBOB_Dataset(train_set, train_batch_size), BBOB_Dataset(
+        return BBOBDataset(train_set, train_batch_size), BBOBDataset(
             test_set, test_batch_size
         )
 
@@ -1264,8 +1268,8 @@ class BBOB_Dataset(Dataset):
     def __len__(self):
         return self.N
 
-    def __add__(self, other: "BBOB_Dataset"):
-        return BBOB_Dataset(self.data + other.data, self.batch_size)
+    def __add__(self, other: "BBOBDataset"):
+        return BBOBDataset(self.data + other.data, self.batch_size)
 
     def shuffle(self):
         self.index = np.random.permutation(self.N)

@@ -233,8 +233,8 @@ def get_config(args=None):
     config.save_interval = config.max_learning_step // config.n_checkpoint
     config.log_interval = config.maxFEs // config.n_logpoint
 
-    if "DEAP_CMAES" not in config.t_optimizer_for_cp:
-        config.t_optimizer_for_cp.append("DEAP_CMAES")
+    """if "DEAP_CMAES" not in config.t_optimizer_for_cp:
+        config.t_optimizer_for_cp.append("DEAP_CMAES")"""
     if "Random_search" not in config.t_optimizer_for_cp:
         config.t_optimizer_for_cp.append("Random_search")
 

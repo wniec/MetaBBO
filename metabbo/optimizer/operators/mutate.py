@@ -2,234 +2,354 @@ import numpy as np
 from typing import Union
 
 
-def generate_random_int_single(NP: int, cols: int, pointer: int) -> np.ndarray:
-    r = np.random.randint(low=0, high=NP, size=cols)
-    while pointer in r:
-        r = np.random.randint(low=0, high=NP, size=cols)
-    return r
-
-
-def generate_random_int(NP: int, cols: int) -> np.ndarray:
-    """
-    Generate a matrix of random integers used by mutation.
-
-    :param NP: Population size.
-    :param cols: The number of random integers generated for each individual.
-    :return: A random integers matrix in shape[''NP'', ''cols''], and elements are in a range of [0, ''NP''-1].
-             The ''cols'' elements at dimension[1] are different from each other.
-    """
-    r = np.random.randint(low=0, high=NP, size=(NP, cols))
-    # validity checking and modification for r
-    for col in range(0, cols):
-        while True:
-            is_repeated = [np.equal(r[:, col], r[:, i]) for i in range(col)]
-            is_repeated.append(np.equal(r[:, col], np.arange(NP)))
-            repeated_index = np.nonzero(np.any(np.stack(is_repeated), axis=0))[0]
-            repeated_sum = repeated_index.size
-            if repeated_sum != 0:
-                r[repeated_index[:], col] = np.random.randint(
-                    low=0, high=NP, size=repeated_sum
-                )
-            else:
-                break
-    return r
-
-
-def rand_1_single(
-    x: np.ndarray, F: float, pointer: int, r: np.ndarray = None
+def generate_random_individuals(
+    population_size: int, cols: int, followed_individual: int
 ) -> np.ndarray:
-    if r is None:
-        r = generate_random_int_single(x.shape[0], 3, pointer)
-    return x[r[0]] + F * (x[r[1]] - x[r[2]])
+    generated_population = np.random.randint(low=0, high=population_size, size=cols)
+    while followed_individual in generated_population:
+        generated_population = np.random.randint(low=0, high=population_size, size=cols)
+    return generated_population
 
 
-def rand_1(x: np.ndarray, F: Union[np.ndarray, float]) -> np.ndarray:
+def generate_mutation_matrix(population_size: int, cols: int) -> np.ndarray:
     """
-    :param x: The 2-D population matrix of shape [NP, dim].
-    :param F: The mutation factor, which could be a float or a 1-D array of shape[NP].
+    Generate a matrix of random integers used for mutation.
+
+    Each row contains 'cols' distinct integers in the range [0, population_size - 1],
+    excluding the row index itself.
+
+    :param population_size: Number of individuals in the population.
+    :param cols: Number of random integers generated per individual.
+    :return: A (population_size x cols) matrix with required constraints.
     """
-    if isinstance(F, np.ndarray) and F.ndim == 1:
-        F = F.reshape(-1, 1)
-    r = generate_random_int(x.shape[0], 3)
-    return x[r[:, 0]] + F * (x[r[:, 1]] - x[r[:, 2]])
+    mutation_matrix = np.random.randint(
+        low=0, high=population_size, size=(population_size, cols)
+    )
+
+    for col in range(cols):
+        while True:
+            # Check for duplicates in previous columns and identity with row index
+            conflicts = np.zeros(population_size, dtype=bool)
+            for prev_col in range(col):
+                conflicts |= mutation_matrix[:, col] == mutation_matrix[:, prev_col]
+            conflicts |= mutation_matrix[:, col] == np.arange(population_size)
+
+            if not np.any(conflicts):
+                break
+
+            mutation_matrix[conflicts, col] = np.random.randint(
+                0, population_size, size=np.sum(conflicts)
+            )
+    return mutation_matrix
+
+
+def rand_1_individual(
+    population: np.ndarray,
+    mutation_factor: float,
+    pointer: int,
+    individuals: np.ndarray = None,
+) -> np.ndarray:
+    if individuals is None:
+        individuals = generate_random_individuals(population.shape[0], 3, pointer)
+    return population[individuals[0]] + mutation_factor * (
+        population[individuals[1]] - population[individuals[2]]
+    )
+
+
+def rand_1(
+    population: np.ndarray, mutation_factor: Union[np.ndarray, float]
+) -> np.ndarray:
+    """
+    :param population: The 2-D population matrix of shape [NP, dim].
+    :param mutation_factor: The mutation factor, which could be a float or a 1-D array of shape[NP].
+    """
+    if isinstance(mutation_factor, np.ndarray) and mutation_factor.ndim == 1:
+        mutation_factor = mutation_factor.reshape(-1, 1)
+    mutation_matrix = generate_mutation_matrix(population.shape[0], 3)
+    return population[mutation_matrix[:, 0]] + mutation_factor * (
+        population[mutation_matrix[:, 1]] - population[mutation_matrix[:, 2]]
+    )
 
 
 def rand_2_single(
-    x: np.ndarray, F: float, pointer: int, r: np.ndarray = None
+    population: np.ndarray,
+    mutation_factor: float,
+    pointer: int,
+    individuals: np.ndarray = None,
 ) -> np.ndarray:
-    if r is None:
-        r = generate_random_int_single(x.shape[0], 5, pointer)
-    return x[r[0]] + F * (x[r[1]] - x[r[2]] + x[r[3]] - x[r[4]])
+    if individuals is None:
+        individuals = generate_random_individuals(population.shape[0], 5, pointer)
+    return population[individuals[0]] + mutation_factor * (
+        population[individuals[1]]
+        - population[individuals[2]]
+        + population[individuals[3]]
+        - population[individuals[4]]
+    )
 
 
-def rand_2(x: np.ndarray, F: Union[np.ndarray, float]) -> np.ndarray:
+def rand_2(
+    population: np.ndarray, mutation_factor: Union[np.ndarray, float]
+) -> np.ndarray:
     """
-    :param x: The 2-D population matrix of shape [NP, dim].
-    :param F: The mutation factor, which could be a float or a 1-D array of shape[NP].
+    :param population: The 2-D population matrix of shape [NP, dim].
+    :param mutation_factor: The mutation factor, which could be a float or a 1-D array of shape[NP].
     """
-    if isinstance(F, np.ndarray) and F.ndim == 1:
-        F = F.reshape(-1, 1)
-    r = generate_random_int(x.shape[0], 5)
-    return x[r[:, 0]] + F * (x[r[:, 1]] - x[r[:, 2]] + x[r[:, 3]] - x[r[:, 4]])
+    if isinstance(mutation_factor, np.ndarray) and mutation_factor.ndim == 1:
+        mutation_factor = mutation_factor.reshape(-1, 1)
+    individuals = generate_mutation_matrix(population.shape[0], 5)
+    return population[individuals[:, 0]] + mutation_factor * (
+        population[individuals[:, 1]]
+        - population[individuals[:, 2]]
+        + population[individuals[:, 3]]
+        - population[individuals[:, 4]]
+    )
 
 
 def best_1_single(
-    x: np.ndarray, best: np.ndarray, F: float, pointer: int, r: np.ndarray = None
+    population: np.ndarray,
+    best: np.ndarray,
+    mutation_factor: float,
+    pointer: int,
+    individuals: np.ndarray = None,
 ) -> np.ndarray:
-    if r is None:
-        r = generate_random_int_single(x.shape[0], 2, pointer)
-    return best + F * (x[r[0]] - x[r[1]])
+    if individuals is None:
+        individuals = generate_random_individuals(population.shape[0], 2, pointer)
+    return best + mutation_factor * (
+        population[individuals[0]] - population[individuals[1]]
+    )
 
 
-def best_1(x: np.ndarray, best: np.ndarray, F: Union[np.ndarray, float]) -> np.ndarray:
+def best_1(
+    population: np.ndarray, best: np.ndarray, mutation_factor: Union[np.ndarray, float]
+) -> np.ndarray:
     """
-    :param x: The 2-D population matrix of shape [NP, dim].
+    :param population: The 2-D population matrix of shape [NP, dim].
     :param best: An array of the best individual of shape [dim].
-    :param F: The mutation factor, which could be a float or a 1-D array of shape[NP].
+    :param mutation_factor: The mutation factor, which could be a float or a 1-D array of shape[NP].
     """
-    if isinstance(F, np.ndarray) and F.ndim == 1:
-        F = F.reshape(-1, 1)
-    r = generate_random_int(x.shape[0], 2)
-    return best + F * (x[r[:, 0]] - x[r[:, 1]])
+    if isinstance(mutation_factor, np.ndarray) and mutation_factor.ndim == 1:
+        mutation_factor = mutation_factor.reshape(-1, 1)
+    r = generate_mutation_matrix(population.shape[0], 2)
+    return best + mutation_factor * (population[r[:, 0]] - population[r[:, 1]])
 
 
 def best_2_single(
-    x: np.ndarray, best: np.ndarray, F: float, pointer: int, r: np.ndarray = None
+    population: np.ndarray,
+    best: np.ndarray,
+    mutation_factor: float,
+    pointer: int,
+    individuals: np.ndarray = None,
 ) -> np.ndarray:
-    if r is None:
-        r = generate_random_int_single(x.shape[0], 4, pointer)
-    return best + F * (x[r[0]] - x[r[1]] + x[r[2]] - x[r[3]])
+    if individuals is None:
+        individuals = generate_random_individuals(population.shape[0], 4, pointer)
+    return best + mutation_factor * (
+        population[individuals[0]]
+        - population[individuals[1]]
+        + population[individuals[2]]
+        - population[individuals[3]]
+    )
 
 
-def best_2(x: np.ndarray, best: np.ndarray, F: Union[np.ndarray, float]) -> np.ndarray:
+def best_2(
+    population: np.ndarray, best: np.ndarray, mutation_factor: Union[np.ndarray, float]
+) -> np.ndarray:
     """
-    :param x: The 2-D population matrix of shape [NP, dim].
+    :param population: The 2-D population matrix of shape [NP, dim].
     :param best: An array of the best individual of shape [dim].
-    :param F: The mutation factor, which could be a float or a 1-D array of shape[NP].
+    :param mutation_factor: The mutation factor, which could be a float or a 1-D array of shape[NP].
     """
-    if isinstance(F, np.ndarray) and F.ndim == 1:
-        F = F.reshape(-1, 1)
-    r = generate_random_int(x.shape[0], 4)
-    return best + F * (x[r[:, 0]] - x[r[:, 1]] + x[r[:, 2]] - x[r[:, 3]])
+    if isinstance(mutation_factor, np.ndarray) and mutation_factor.ndim == 1:
+        mutation_factor = mutation_factor.reshape(-1, 1)
+    r = generate_mutation_matrix(population.shape[0], 4)
+    return best + mutation_factor * (
+        population[r[:, 0]]
+        - population[r[:, 1]]
+        + population[r[:, 2]]
+        - population[r[:, 3]]
+    )
 
 
 def rand_to_best_1_single(
-    x: np.ndarray, best: np.ndarray, F: float, pointer: int, r: np.ndarray = None
+    population: np.ndarray,
+    best: np.ndarray,
+    mutation_factor: float,
+    pointer: int,
+    r: np.ndarray = None,
 ) -> np.ndarray:
     if r is None:
-        r = generate_random_int_single(x.shape[0], 3, pointer)
-    return x[r[0]] + F * (best - x[r[0]] + x[r[1]] - x[r[2]])
+        r = generate_random_individuals(population.shape[0], 3, pointer)
+    return population[r[0]] + mutation_factor * (
+        best - population[r[0]] + population[r[1]] - population[r[2]]
+    )
 
 
 def rand_to_best_1(
-    x: np.ndarray, best: np.ndarray, F: Union[np.ndarray, float]
+    population: np.ndarray, best: np.ndarray, mutation_factor: Union[np.ndarray, float]
 ) -> np.ndarray:
     """
-    :param x: The 2-D population matrix of shape [NP, dim].
+    :param population: The 2-D population matrix of shape [NP, dim].
     :param best: An array of the best individual of shape [dim].
-    :param F: The mutation factor, which could be a float or a 1-D array of shape[NP].
+    :param mutation_factor: The mutation factor, which could be a float or a 1-D array of shape[NP].
     """
-    if isinstance(F, np.ndarray) and F.ndim == 1:
-        F = F.reshape(-1, 1)
-    r = generate_random_int(x.shape[0], 3)
-    return x[r[:, 0]] + F * (best - x[r[:, 0]] + x[r[:, 1]] - x[r[:, 2]])
+    if isinstance(mutation_factor, np.ndarray) and mutation_factor.ndim == 1:
+        mutation_factor = mutation_factor.reshape(-1, 1)
+    individuals = generate_mutation_matrix(population.shape[0], 3)
+    return population[individuals[:, 0]] + mutation_factor * (
+        best
+        - population[individuals[:, 0]]
+        + population[individuals[:, 1]]
+        - population[individuals[:, 2]]
+    )
 
 
 def rand_to_best_2_single(
-    x: np.ndarray, best: np.ndarray, F: float, pointer: int, r: np.ndarray = None
+    population: np.ndarray,
+    best: np.ndarray,
+    mutation_factor: float,
+    pointer: int,
+    individuals: np.ndarray = None,
 ) -> np.ndarray:
-    if r is None:
-        r = generate_random_int_single(x.shape[0], 5, pointer)
-    return x[r[0]] + F * (best - x[r[0]] + x[r[1]] - x[r[2]] + x[r[3]] - x[r[4]])
+    if individuals is None:
+        individuals = generate_random_individuals(population.shape[0], 5, pointer)
+    return population[individuals[0]] + mutation_factor * (
+        best
+        - population[individuals[0]]
+        + population[individuals[1]]
+        - population[individuals[2]]
+        + population[individuals[3]]
+        - population[individuals[4]]
+    )
 
 
 def rand_to_best_2(
-    x: np.ndarray, best: np.ndarray, F: Union[np.ndarray, float]
+    population: np.ndarray, best: np.ndarray, mutation_factor: Union[np.ndarray, float]
 ) -> np.ndarray:
     """
-    :param x: The 2-D population matrix of shape [NP, dim].
+    :param population: The 2-D population matrix of shape [NP, dim].
     :param best: An array of the best individual of shape [dim].
-    :param F: The mutation factor, which could be a float or a 1-D array of shape[NP].
+    :param mutation_factor: The mutation factor, which could be a float or a 1-D array of shape[NP].
     """
-    if isinstance(F, np.ndarray) and F.ndim == 1:
-        F = F.reshape(-1, 1)
-    r = generate_random_int(x.shape[0], 5)
-    return x[r[:, 0]] + F * (
-        best - x[r[:, 0]] + x[r[:, 1]] - x[r[:, 2]] + x[r[:, 3]] - x[r[:, 4]]
+    if isinstance(mutation_factor, np.ndarray) and mutation_factor.ndim == 1:
+        mutation_factor = mutation_factor.reshape(-1, 1)
+    individuals = generate_mutation_matrix(population.shape[0], 5)
+    return population[individuals[:, 0]] + mutation_factor * (
+        best
+        - population[individuals[:, 0]]
+        + population[individuals[:, 1]]
+        - population[individuals[:, 2]]
+        + population[individuals[:, 3]]
+        - population[individuals[:, 4]]
     )
 
 
 def cur_to_best_1_single(
-    x: np.ndarray, best: np.ndarray, F: float, pointer: int, r: np.ndarray = None
+    population: np.ndarray,
+    best: np.ndarray,
+    mutation_factor: float,
+    pointer: int,
+    individuals: np.ndarray = None,
 ) -> np.ndarray:
-    if r is None:
-        r = generate_random_int_single(x.shape[0], 2, pointer)
-    return x[pointer] + F * (best - x[pointer] + x[r[0]] - x[r[1]])
+    if individuals is None:
+        individuals = generate_random_individuals(population.shape[0], 2, pointer)
+    return population[pointer] + mutation_factor * (
+        best
+        - population[pointer]
+        + population[individuals[0]]
+        - population[individuals[1]]
+    )
 
 
 def cur_to_best_1(
-    x: np.ndarray, best: np.ndarray, F: Union[np.ndarray, float]
+    population: np.ndarray, best: np.ndarray, mutation_factor: Union[np.ndarray, float]
 ) -> np.ndarray:
     """
-    :param x: The 2-D population matrix of shape [NP, dim].
+    :param population: The 2-D population matrix of shape [NP, dim].
     :param best: An array of the best individual of shape [dim].
-    :param F: The mutation factor, which could be a float or a 1-D array of shape[NP].
+    :param mutation_factor: The mutation factor, which could be a float or a 1-D array of shape[NP].
     """
-    if isinstance(F, np.ndarray) and F.ndim == 1:
-        F = F.reshape(-1, 1)
-    r = generate_random_int(x.shape[0], 2)
-    return x + F * (best - x + x[r[:, 0]] - x[r[:, 1]])
+    if isinstance(mutation_factor, np.ndarray) and mutation_factor.ndim == 1:
+        mutation_factor = mutation_factor.reshape(-1, 1)
+    r = generate_mutation_matrix(population.shape[0], 2)
+    return population + mutation_factor * (
+        best - population + population[r[:, 0]] - population[r[:, 1]]
+    )
 
 
 def cur_to_best_2_single(
-    x: np.ndarray, best: np.ndarray, F: float, pointer: int, r: np.ndarray = None
+    population: np.ndarray,
+    best: np.ndarray,
+    mutation_factor: float,
+    pointer: int,
+    individuals: np.ndarray = None,
 ) -> np.ndarray:
-    if r is None:
-        r = generate_random_int_single(x.shape[0], 4, pointer)
-    return x[pointer] + F * (best - x[pointer] + x[r[0]] - x[r[1]] + x[r[2]] - x[r[3]])
+    if individuals is None:
+        individuals = generate_random_individuals(population.shape[0], 4, pointer)
+    return population[pointer] + mutation_factor * (
+        best
+        - population[pointer]
+        + population[individuals[0]]
+        - population[individuals[1]]
+        + population[individuals[2]]
+        - population[individuals[3]]
+    )
 
 
 def cur_to_best_2(
-    x: np.ndarray, best: np.ndarray, F: Union[np.ndarray, float]
+    population: np.ndarray, best: np.ndarray, mutation_factor: Union[np.ndarray, float]
 ) -> np.ndarray:
     """
-    :param x: The 2-D population matrix of shape [NP, dim].
+    :param population: The 2-D population matrix of shape [NP, dim].
     :param best: An array of the best individual of shape [dim].
-    :param F: The mutation factor, which could be a float or a 1-D array of shape[NP].
+    :param mutation_factor: The mutation factor, which could be a float or a 1-D array of shape[NP].
     """
-    if isinstance(F, np.ndarray) and F.ndim == 1:
-        F = F.reshape(-1, 1)
-    r = generate_random_int(x.shape[0], 4)
-    return x + F * (best - x + x[r[:, 0]] - x[r[:, 1]] + x[r[:, 2]] - x[r[:, 3]])
+    if isinstance(mutation_factor, np.ndarray) and mutation_factor.ndim == 1:
+        mutation_factor = mutation_factor.reshape(-1, 1)
+    r = generate_mutation_matrix(population.shape[0], 4)
+    return population + mutation_factor * (
+        best
+        - population
+        + population[r[:, 0]]
+        - population[r[:, 1]]
+        + population[r[:, 2]]
+        - population[r[:, 3]]
+    )
 
 
 def cur_to_rand_1_single(
-    x: np.ndarray, F: float, pointer: int, r: np.ndarray = None
+    x: np.ndarray, mutation_factor: float, pointer: int, r: np.ndarray = None
 ) -> np.ndarray:
     if r is None:
-        r = generate_random_int_single(x.shape[0], 3, pointer)
-    return x[pointer] + F * (x[r[0]] - x[pointer] + x[r[1]] - x[r[2]])
+        r = generate_random_individuals(x.shape[0], 3, pointer)
+    return x[pointer] + mutation_factor * (x[r[0]] - x[pointer] + x[r[1]] - x[r[2]])
 
 
-def cur_to_rand_1(x: np.ndarray, F: Union[np.ndarray, float]) -> np.ndarray:
-    if isinstance(F, np.ndarray) and F.ndim == 1:
-        F = F.reshape(-1, 1)
-    r = generate_random_int(x.shape[0], 3)
-    return x + F * (x[r[:, 0]] - x + x[r[:, 1]] - x[r[:, 2]])
+def cur_to_rand_1(
+    population: np.ndarray, mutation_factor: Union[np.ndarray, float]
+) -> np.ndarray:
+    if isinstance(mutation_factor, np.ndarray) and mutation_factor.ndim == 1:
+        mutation_factor = mutation_factor.reshape(-1, 1)
+    r = generate_mutation_matrix(population.shape[0], 3)
+    return population + mutation_factor * (
+        population[r[:, 0]] - population + population[r[:, 1]] - population[r[:, 2]]
+    )
 
 
 def cur_to_rand_2_single(
-    x: np.ndarray, F: float, pointer: int, r: np.ndarray = None
+    x: np.ndarray, mutation_factor: float, pointer: int, r: np.ndarray = None
 ) -> np.ndarray:
     if r is None:
-        r = generate_random_int_single(x.shape[0], 5, pointer)
-    return x[pointer] + F * (
+        r = generate_random_individuals(x.shape[0], 5, pointer)
+    return x[pointer] + mutation_factor * (
         x[r[0]] - x[pointer] + x[r[1]] - x[r[2]] + x[r[3]] - x[r[4]]
     )
 
 
-def cur_to_rand_2(x: np.ndarray, F: Union[np.ndarray, float]) -> np.ndarray:
-    if isinstance(F, np.ndarray) and F.ndim == 1:
-        F = F.reshape(-1, 1)
-    r = generate_random_int(x.shape[0], 5)
-    return x + F * (x[r[:, 0]] - x + x[r[:, 1]] - x[r[:, 2]] - x[r[:, 3]] + x[r[:, 4]])
+def cur_to_rand_2(
+    x: np.ndarray, mutation_factor: Union[np.ndarray, float]
+) -> np.ndarray:
+    if isinstance(mutation_factor, np.ndarray) and mutation_factor.ndim == 1:
+        mutation_factor = mutation_factor.reshape(-1, 1)
+    r = generate_mutation_matrix(x.shape[0], 5)
+    return x + mutation_factor * (
+        x[r[:, 0]] - x + x[r[:, 1]] - x[r[:, 2]] - x[r[:, 3]] + x[r[:, 4]]
+    )
