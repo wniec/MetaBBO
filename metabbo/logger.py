@@ -72,7 +72,6 @@ def get_average_returns(results: dict, norm: bool = False):
         agents.append(agent)
     avg_return = {}
     std_return = {}
-    # n_checkpoint=len(results[problems[0]][agents[0]])
     for agent in agents:
         avg_return[agent] = []
         std_return[agent] = []
@@ -84,12 +83,8 @@ def get_average_returns(results: dict, norm: bool = False):
             avg_return[agent].append(np.mean(values, -1))
         avg_return[agent] = np.mean(avg_return[agent], 0)
         std_return[agent] = np.mean(std_return[agent], 0)
-        # for checkpoint in range(n_checkpoint):
-        #     return_sum=0
-        #     for problem in problems:
-        #         return_sum+=results[problem][agent][checkpoint]
-        #     avg_return[agent].append(return_sum/len(problems))
-    return avg_return, std_return  # {'agent':[] len = n_checkpoints}
+
+    return avg_return, std_return
 
 
 def get_average_costs(results: dict, norm: bool = False):
@@ -112,7 +107,7 @@ def get_average_costs(results: dict, norm: bool = False):
             avg_cost[agent].append(np.mean(values, -1))
         avg_cost[agent] = np.mean(avg_cost[agent], 0)
         std_cost[agent] = np.mean(std_cost[agent], 0)
-    return avg_cost, std_cost  # {'agent':[] len = n_checkpoints}
+    return avg_cost, std_cost
 
 
 def cal_scores1(D: dict, maxf: float) -> float:
@@ -255,15 +250,6 @@ def gen_overall_tab(results: dict, out_dir: str) -> None:
         columns=multi_columns,
     )
 
-    # calculate baseline1 cmaes
-    cmaes_obj = {}
-    for problem in problems:
-        blobj_problem = results["cost"][problem]["DEAP_CMAES"]  # 51 * record_length
-        objs = []
-        for run in range(51):
-            objs.append(blobj_problem[run][-1])
-        cmaes_obj[problem] = sum(objs) / 51
-
     # calculate baseline2 random_search
     rs_obj = {}
     for problem in problems:
@@ -290,9 +276,7 @@ def gen_overall_tab(results: dict, out_dir: str) -> None:
             )
             # calculate each Gap
             df_results.loc[optimizer, (problem, "Gap")] = "%.3f" % (
-                1
-                - (rs_obj[problem] - avg_obj)
-                / (rs_obj[problem] - cmaes_obj[problem] + 1e-10)
+                1 - (rs_obj[problem] - avg_obj)
             )
             fes_problem_optimizer = np.array(results["fes"][problem][optimizer])
             avg_fes = np.mean(fes_problem_optimizer)
@@ -303,7 +287,7 @@ def gen_overall_tab(results: dict, out_dir: str) -> None:
                 + np.format_float_scientific(std_fes, precision=3, exp_digits=1)
                 + ")"
             )
-    df_results.to_excel(out_dir + "overall_table.xlsx")
+    df_results.to_excel(os.path.join(out_dir, "overall_table.xlsx"))
 
 
 def to_label(agent_name: str) -> str:
@@ -380,12 +364,14 @@ class Logger:
                 if logged:
                     plt.ylabel("log Costs")
                     plt.savefig(
-                        output_dir + f"{name}_log_cost_curve.png", bbox_inches="tight"
+                        os.path.join(output_dir, f"{name}_log_cost_curve.png"),
+                        bbox_inches="tight",
                     )
                 else:
                     plt.ylabel("Costs")
                     plt.savefig(
-                        output_dir + f"{name}_cost_curve.png", bbox_inches="tight"
+                        os.path.join(output_dir, f"{name}_cost_curve.png"),
+                        bbox_inches="tight",
                     )
                 plt.close()
             else:
@@ -930,16 +916,17 @@ class Logger:
 
 
 def post_processing_test_statics(log_dir: str, logger: Logger) -> None:
-    with open(log_dir + "test.pkl", "rb") as f:
+    with open(os.path.join(log_dir, "test.pkl"), "rb") as f:
         results = pickle.load(f)
-    with open(log_dir + "random_search_baseline.pkl", "rb") as f:
+    with open(os.path.join(log_dir, "random_search_baseline.pkl"), "rb") as f:
         random = pickle.load(f)
     # Generate excel tables
-    if not os.path.exists(log_dir + "tables/"):
-        os.makedirs(log_dir + "tables/")
-    gen_overall_tab(results, log_dir + "tables/")
-    gen_algorithm_complexity_table(results, log_dir + "tables/")
-    gen_agent_performance_table(results, log_dir + "tables/")
+    tables_path = os.path.join(log_dir, "tables")
+    if not os.path.exists(tables_path):
+        os.makedirs(tables_path)
+    gen_overall_tab(results, tables_path)
+    gen_algorithm_complexity_table(results, tables_path)
+    gen_agent_performance_table(results, tables_path)
 
     # Generate figures
     if not os.path.exists(log_dir + "pics/"):
@@ -982,15 +969,16 @@ def post_processing_test_statics(log_dir: str, logger: Logger) -> None:
 
 
 def post_processing_rollout_statics(log_dir: str, logger: Logger) -> None:
-    with open(log_dir + "rollout.pkl", "rb") as f:
+    with open(os.path.join(log_dir, "rollout.pkl"), "rb") as f:
         results = pickle.load(f)
-    if not os.path.exists(log_dir + "pics/"):
-        os.makedirs(log_dir + "pics/")
+    pics_path = os.path.join(log_dir, "pics")
+    if not os.path.exists(pics_path):
+        os.makedirs(pics_path)
     logger.draw_train_return(
         results,
-        log_dir + "pics/",
+        pics_path,
     )
     logger.draw_train_avg_cost(
         results,
-        log_dir + "pics/",
+        pics_path,
     )

@@ -58,10 +58,9 @@ if __name__ == "__main__":
         )  # user defined agent_save_dir + agent name + run_time + agent_name
         if not os.path.exists(rollout_save_dir):
             os.makedirs(rollout_save_dir)
-        # copy models from agent_save_dir to rollout_save_dir
         for filename in os.listdir(agent_save_dir):
             if os.path.isfile(os.path.join(agent_save_dir, filename)):
-                shutil.copy(os.path.join(agent_save_dir, filename), rollout_save_dir)
+                shutil.copy(os.path.join(agent_save_dir, filename), str(rollout_save_dir))
         test_agent_load_dir = None
         if config.agent_load_dir is not None:
             test_agent_load_dir = config.agent_load_dir
@@ -73,15 +72,15 @@ if __name__ == "__main__":
         shutil.rmtree(rollout_save_dir)  # remove rollout model files after rollout
         post_processing_rollout_statics(config.rollout_log_dir, Logger(config))
 
-        # test
         if test_agent_load_dir is not None:
             config.agent_load_dir = test_agent_load_dir
         test_model_file = os.path.join(
             config.agent_load_dir, f"{config.train_agent}.pkl"
         )
         shutil.copy(
-            os.path.join(agent_save_dir, f"checkpoint{config.n_checkpoint-1}.pkl"), test_model_file
-        )  # copy checkpoint{i}.pkl to agent_name.pkl
+            os.path.join(agent_save_dir, f"checkpoint{config.n_checkpoint - 1}.pkl"),
+            test_model_file,
+        )
         if (config.train_agent != config.agent) and (
             config.train_agent not in config.agent_for_cp
         ):

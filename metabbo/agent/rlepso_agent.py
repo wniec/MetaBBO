@@ -1,4 +1,8 @@
+import json
+import os
+
 import torch
+from matplotlib import pyplot as plt
 from torch import nn
 from torch.distributions import Normal
 from agent.basic_agent import Basic_Agent
@@ -245,6 +249,26 @@ class RLEPSO_Agent(Basic_Agent):
                     "checkpoint" + str(self.__cur_checkpoint),
                     self,
                 )
+                avg_actions_list = [i.tolist() for i in self.average_actions_taken]
+                var_actions_list = [i.tolist() for i in self.actions_taken_variance]
+                with open("average_actions.json", "w", encoding='utf8') as json_file:
+                    json.dump(avg_actions_list, json_file)
+                fig, ax = plt.subplots(7, 2, figsize=(8, 8), constrained_layout=True)
+
+                for i in range(7):
+                    ax[i, 0].plot([idx for idx, _ in enumerate(avg_actions_list)],
+                                  [action[i] for action in avg_actions_list],
+                                  linewidth=0.5)
+                    ax[i, 1].plot([idx for idx, _ in enumerate(var_actions_list)],
+                                  [action[i] for action in var_actions_list],
+                                  linewidth=0.5,
+                                  color="orange")
+                    ax[i, 0].set_title(f"action {i} average value trough training")
+                    ax[i, 1].set_title(f"action {i} value variance trough training")
+                plt.savefig(os.path.join(self.__config.agent_save_dir, f"actions_checkpoint{self.__cur_checkpoint}.png"))
+
+
+
                 self.__cur_checkpoint += 1
 
             if self.__learning_time >= config.max_learning_step:
@@ -256,6 +280,8 @@ class RLEPSO_Agent(Basic_Agent):
                 }
 
     def train_episode(self, env: "PBO_Env"):
+        actions_taken_avg = []
+        actions_taken_var = []
         config = self.__config
         # setup
         memory = Memory()
@@ -285,6 +311,8 @@ class RLEPSO_Agent(Basic_Agent):
                     state,
                     require_entropy=True,
                 )
+                actions_taken_avg.append(action.reshape(7, 5).mean(dim=1).detach().cpu())
+                actions_taken_var.append(action.detach().cpu().tolist())
                 action = action.reshape(config.action_shape)
                 memory.actions.append(action.clone().detach())
                 action = action.cpu()
@@ -320,6 +348,8 @@ class RLEPSO_Agent(Basic_Agent):
                 memory,
             )
             memory.clear_memory()
+            self.average_actions_taken.append(sum(actions_taken_avg) / len(actions_taken_avg))
+            self.actions_taken_variance.append(torch.tensor(actions_taken_var).reshape(-1, 7, 5).var(dim=-1).mean(dim=0).detach().cpu())
         return self.__learning_time >= config.max_learning_step, {
             "normalizer": env.optimizer.cost[0],
             "gbest": env.optimizer.cost[-1],

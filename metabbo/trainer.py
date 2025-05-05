@@ -23,7 +23,7 @@ class Trainer(object):
         if config.resume_dir is None:
             self.agent = eval(config.train_agent)(config)
         else:
-            file_path = config.resume_dir + config.train_agent + ".pkl"
+            file_path = os.path.join(config.resume_dir, f"{config.train_agent}.pkl")
             with open(file_path, "rb") as f:
                 self.agent = pickle.load(f)
             self.agent.update_setting(config)
@@ -31,14 +31,17 @@ class Trainer(object):
         self.train_set, self.test_set = construct_problem_set(config)
 
     def save_log(self, epochs, steps, cost, returns, normalizer) -> None:
-        log_dir = (
-            self.config.log_dir
-            + f"/train/{self.agent.__class__.__name__}/{self.config.run_time}/log/"
+        log_dir = os.path.join(
+            self.config.log_dir,
+            "train",
+            self.agent.__class__.__name__,
+            self.config.run_time,
+            "log",
         )
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
         return_save = np.stack((steps, returns), 0)
-        np.save(log_dir + "return", return_save)
+        np.save(os.path.join(log_dir, "return"), return_save)
         for problem in self.train_set:
             name = problem.__str__()
             if len(cost[name]) == 0:
@@ -47,15 +50,18 @@ class Trainer(object):
                 cost[name].append(cost[name][-1])
                 normalizer[name].append(normalizer[name][-1])
             cost_save = np.stack((epochs, cost[name], normalizer[name]), 0)
-            np.save(log_dir + name + "_cost", cost_save)
+            np.save(os.path.join(log_dir, f"{name}_cost"), cost_save)
 
     def draw_cost(self, Name=None, normalize=False) -> None:
-        log_dir = (
-            self.config.log_dir
-            + f"/train/{self.agent.__class__.__name__}/{self.config.run_time}/"
+        log_dir = os.path.join(
+            self.config.log_dir,
+            "train",
+            self.agent.__class__.__name__,
+            self.config.run_time,
         )
-        if not os.path.exists(log_dir + "pic/"):
-            os.makedirs(log_dir + "pic/")
+        pic_path = os.path.join(log_dir, "pic")
+        if not os.path.exists(pic_path):
+            os.makedirs(pic_path)
         for problem in self.train_set:
             if Name is None:
                 name = problem.__str__()
@@ -66,27 +72,29 @@ class Trainer(object):
             else:
                 name = Name
             plt.figure()
-            plt.title(name + "_cost")
-            values = np.load(log_dir + "log/" + name + "_cost.npy")
+            plt.title(f"{name}_cost")
+            values = np.load(os.path.join(log_dir, "log", f"{name}_cost.npy"))
             x, y, n = values
             if normalize:
                 y /= n
             plt.plot(x, y)
-            plt.savefig(log_dir + f"pic/{name}_cost.png")
+            plt.savefig(os.path.join(pic_path, f"{name}_cost.png"))
             plt.close()
 
     def draw_average_cost(self, normalize=True) -> None:
-        log_dir = (
-            self.config.log_dir
-            + f"/train/{self.agent.__class__.__name__}/{self.config.run_time}/"
+        log_dir = os.path.join(
+            self.config.log_dir,
+            "train",
+            self.agent.__class__.__name__,
+            self.config.run_time,
         )
-        if not os.path.exists(log_dir + "pic/"):
-            os.makedirs(log_dir + "pic/")
-        X = []
-        Y = []
+        pic_path = os.path.join(log_dir, "pic")
+        if not os.path.exists(pic_path):
+            os.makedirs(pic_path)
+        X, Y = [], []
         for problem in self.train_set:
             name = problem.__str__()
-            values = np.load(log_dir + "log/" + name + "_cost.npy")
+            values = np.load(os.path.join(log_dir, "log", f"{name}_cost.npy"))
             x, y, n = values
             if normalize:
                 y /= n
@@ -97,21 +105,24 @@ class Trainer(object):
         plt.figure()
         plt.title("all problem cost")
         plt.plot(X, Y)
-        plt.savefig(log_dir + "pic/all_problem_cost.png")
+        plt.savefig(os.path.join(log_dir, "pic", "all_problem_cost.png"))
         plt.close()
 
     def draw_return(self) -> None:
-        log_dir = (
-            self.config.log_dir
-            + f"/train/{self.agent.__class__.__name__}/{self.config.run_time}/"
+        log_dir = os.path.join(
+            self.config.log_dir,
+            "train",
+            self.agent.__class__.__name__,
+            self.config.run_time,
         )
-        if not os.path.exists(log_dir + "pic/"):
-            os.makedirs(log_dir + "pic/")
+        pic_path = os.path.join(log_dir, "pic")
+        if not os.path.exists(pic_path):
+            os.makedirs(pic_path)
         plt.figure()
         plt.title("return")
-        values = np.load(log_dir + "log/return.npy")
+        values = np.load(os.path.join(log_dir, "log", "return.npy"))
         plt.plot(values[0], values[1])
-        plt.savefig(log_dir + "pic/return.png")
+        plt.savefig(os.path.join(pic_path, "return.png"))
         plt.close()
 
     def train(self) -> None:

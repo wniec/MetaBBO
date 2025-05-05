@@ -164,12 +164,12 @@ class Protein_Docking_Dataset(Dataset):
             for j in range(Protein_Docking_Dataset.n_start_points):
                 problem_id = i + "_" + str(j + 1)
                 data_dir = path.join(data_folder, problem_id)
-                coor_init = np.loadtxt(data_dir + "/coor_init")
-                q = np.loadtxt(data_dir + "/q")
-                e = np.loadtxt(data_dir + "/e")
-                r = np.loadtxt(data_dir + "/r")
-                basis = np.loadtxt(data_dir + "/basis")
-                eigval = np.loadtxt(data_dir + "/eigval")
+                coor_init = np.loadtxt(path.join(data_dir, "coor_init"))
+                q = np.loadtxt(path.join(data_dir, "q"))
+                e = np.loadtxt(path.join(data_dir, "e"))
+                r = np.loadtxt(path.join(data_dir, "r"))
+                basis = np.loadtxt(path.join(data_dir, "basis"))
+                eigval = np.loadtxt(path.join(data_dir, "eigval"))
 
                 q = np.tile(q, (1, 1))
                 e = np.tile(e, (1, 1))
@@ -197,7 +197,7 @@ class Protein_Docking_Dataset(Dataset):
         if self.batch_size < 2:
             return self.data[self.index[item]]
         ptr = self.ptr[item]
-        index = self.index[ptr: min(ptr + self.batch_size, self.N)]
+        index = self.index[ptr : min(ptr + self.batch_size, self.N)]
         res = []
         for i in range(len(index)):
             res.append(self.data[index[i]])

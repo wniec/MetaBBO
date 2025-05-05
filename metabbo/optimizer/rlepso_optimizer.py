@@ -149,8 +149,8 @@ class RLEPSO_Optimizer(Learnable_Optimizer):
         )
         per_group_num = self.__population_size // self.__n_group
         for i in range(self.__n_group):
-            a = torch.tensor(actions[i * self.__n_group : i * self.__n_group + 7])
-            c_mutations[i * per_group_num : (i + 1) * per_group_num] = (
+            a = torch.tensor(actions[i * self.__n_group: i * self.__n_group + 7])
+            c_mutations[i * per_group_num: (i + 1) * per_group_num] = (
                 a[0]
                 * 0.01
                 * self.__per_no_improve[i * per_group_num : (i + 1) * per_group_num]

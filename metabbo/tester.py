@@ -1,7 +1,8 @@
 import copy
+from collections import defaultdict
 from itertools import product
 
-from utils import construct_problem_set
+from utils import construct_problem_set, default_to_regular
 import numpy as np
 import pickle
 import matplotlib.pyplot as plt
@@ -13,6 +14,8 @@ from environment.basic_environment import PBO_Env
 from logger import Logger
 from optimizer.random_search import Random_search
 from optimizer.rlepso_optimizer import RLEPSO_Optimizer  # noqa 403
+
+RUNS_NO = 51
 
 
 def calculate_time_0(dim, fes) -> float:
@@ -52,11 +55,10 @@ class Tester(object):
         self.agent_name_list = config.agent_for_cp
         self.agent = None
         if agent_name is not None:  # learnable optimizer
-            file_path = agent_load_dir + agent_name + ".pkl"
+            file_path = os.path.join(agent_load_dir, f"{agent_name}.pkl")
             with open(file_path, "rb") as f:
                 self.agent = pickle.load(f)
             self.agent_name_list.append(agent_name)
-            # self.agent = pickle.load(agent_load_dir + agent_name + '.pkl')
         if config.optimizer is not None:
             self.optimizer_name = config.optimizer
             self.optimizer = eval(config.optimizer)(copy.deepcopy(config))
@@ -65,73 +67,57 @@ class Tester(object):
             os.makedirs(self.log_dir)
         self.config = config
 
-        if self.config.problem[-6:] == "-torch":
-            self.config.problem = self.config.problem[:-6]
-
         _, self.test_set = construct_problem_set(self.config)
 
-        self.seed = range(51)
+        self.seed = range(RUNS_NO)
         # initialize the dataframe for logging
         self.test_results = {"cost": {}, "fes": {}, "T0": 0.0, "T1": {}, "T2": {}}
 
         # prepare experimental optimizers and agents
         self.agent_for_cp = []
         for agent in config.agent_for_cp:
-            file_path = agent_load_dir + agent + ".pkl"
+            file_path = os.path.join(agent_load_dir, f"{agent}.pkl")
             with open(file_path, "rb") as f:
                 self.agent_for_cp.append(pickle.load(f))
-            # self.agent_for_cp.append(pickle.load(agent_load_dir + agent + '.pkl'))
-        self.l_optimizer_for_cp = []
-        for optimizer in config.l_optimizer_for_cp:
-            self.l_optimizer_for_cp.append(eval(optimizer)(copy.deepcopy(config)))
-        self.t_optimizer_for_cp = []
-        for optimizer in config.t_optimizer_for_cp:
-            self.t_optimizer_for_cp.append(eval(optimizer)(copy.deepcopy(config)))
+
+        self.learnable_optimizers = [
+            eval(optimizer)(copy.deepcopy(config))
+            for optimizer in config.l_optimizer_for_cp
+        ]
+        self.traditional_optimizers = [
+            eval(optimizer)(copy.deepcopy(config))
+            for optimizer in config.t_optimizer_for_cp
+        ]
+
         if self.agent is not None:
             self.agent_for_cp.append(self.agent)
-            self.l_optimizer_for_cp.append(self.optimizer)
+            self.learnable_optimizers.append(self.optimizer)
         elif config.optimizer is not None:
-            self.t_optimizer_for_cp.append(self.optimizer)
-
+            self.traditional_optimizers.append(self.optimizer)
         # logging
+        self.init_log()
+
+        self.test_results["T1"] = defaultdict(lambda: 0.0)
+        self.test_results["T2"] = defaultdict(lambda: 0.0)
+
+        for problem in self.test_set:
+            self.test_results["cost"][problem.__str__()] = defaultdict(list)
+            self.test_results["fes"][problem.__str__()] = defaultdict(list)
+
+    def init_log(self):
         if len(self.agent_for_cp) == 0:
             print("None of learnable agent")
         else:
             print(f"there are {len(self.agent_for_cp)} agent")
-            for a, l_optimizer in zip(self.agent_name_list, self.l_optimizer_for_cp):
+            for a, l_optimizer in zip(self.agent_name_list, self.learnable_optimizers):
                 print(f"learnable_agent:{a},l_optimizer:{type(l_optimizer).__name__}")
 
-        if len(self.t_optimizer_for_cp) == 0:
+        if len(self.traditional_optimizers) == 0:
             print("None of traditional optimizer")
         else:
-            print(f"there are {len(self.t_optimizer_for_cp)} traditional optimizer")
-            for t_optmizer in self.t_optimizer_for_cp:
+            print(f"there are {len(self.traditional_optimizers)} traditional optimizer")
+            for t_optmizer in self.traditional_optimizers:
                 print(f"t_optmizer:{type(t_optmizer).__name__}")
-
-        for agent_name in self.agent_name_list:
-            self.test_results["T1"][agent_name] = 0.0
-            self.test_results["T2"][agent_name] = 0.0
-        for optimizer in self.t_optimizer_for_cp:
-            self.test_results["T1"][type(optimizer).__name__] = 0.0
-            self.test_results["T2"][type(optimizer).__name__] = 0.0
-
-        for problem in self.test_set:
-            self.test_results["cost"][problem.__str__()] = {}
-            self.test_results["fes"][problem.__str__()] = {}
-            for agent_name in self.agent_name_list:
-                self.test_results["cost"][problem.__str__()][
-                    agent_name
-                ] = []  # 51 np.arrays
-                self.test_results["fes"][problem.__str__()][
-                    agent_name
-                ] = []  # 51 scalars
-            for optimizer in self.t_optimizer_for_cp:
-                self.test_results["cost"][problem.__str__()][
-                    type(optimizer).__name__
-                ] = []  # 51 np.arrays
-                self.test_results["fes"][problem.__str__()][
-                    type(optimizer).__name__
-                ] = []  # 51 scalars
 
     def test(self):
         print(f"start testing: {self.config.run_time}")
@@ -139,103 +125,76 @@ class Tester(object):
         T0 = calculate_time_0(self.config.dim, self.config.maxFEs)
         self.test_results["T0"] = T0
         pbar_len = (
-            (len(self.t_optimizer_for_cp) + len(self.agent_for_cp))
+            (len(self.traditional_optimizers) + len(self.agent_for_cp))
             * self.test_set.N
-            * 51
+            * RUNS_NO
         )
         with tqdm(range(pbar_len), desc="Testing") as pbar:
             for i, problem in enumerate(self.test_set):
                 # run learnable optimizer
                 for agent_id, (agent, optimizer) in enumerate(
-                    zip(self.agent_for_cp, self.l_optimizer_for_cp)
+                    zip(self.agent_for_cp, self.learnable_optimizers)
                 ):
-                    T1 = 0
-                    T2 = 0
-                    for run in range(51):
+                    T1, T2 = 0.0, 0.0
+                    agent_name = self.agent_name_list[agent_id]
+                    for run in range(RUNS_NO):
                         start = time.perf_counter()
                         np.random.seed(self.seed[run])
                         problem.reset()
                         # construct an ENV for (problem,optimizer)
-                        env = PBO_Env(problem, optimizer)
-                        info = agent.rollout_episode(env)
-                        cost = info["cost"]
-                        while len(cost) < 51:
-                            cost.append(cost[-1])
-                        fes = info["fes"]
-                        end = time.perf_counter()
-                        if i == 0:
-                            T2 += (end - start) * 1000  # ms
-                            T1 += env.problem.T1
-                        self.test_results["cost"][problem.__str__()][
-                            self.agent_name_list[agent_id]
-                        ].append(cost)
-                        self.test_results["fes"][problem.__str__()][
-                            self.agent_name_list[agent_id]
-                        ].append(fes)
-                        pbar_info = {
-                            "problem": problem.__str__(),
-                            "optimizer": self.agent_name_list[agent_id],
-                            "run": run,
-                            "cost": cost[-1],
-                            "fes": fes,
-                        }
-                        pbar.set_postfix(pbar_info)
-                        pbar.update(1)
+                        environment = PBO_Env(problem, optimizer)
+                        info = agent.rollout_episode(environment)
+                        T1, T2 = self.report_test_episode(
+                            agent_name, problem, info, pbar, start, T1, T2, i, run
+                        )
                     if i == 0:
-                        self.test_results["T1"][self.agent_name_list[agent_id]] = (
-                            T1 / 51
-                        )
-                        self.test_results["T2"][self.agent_name_list[agent_id]] = (
-                            T2 / 51
-                        )
-                        if type(agent).__name__ == "L2L_Agent":
-                            self.test_results["T1"][self.agent_name_list[agent_id]] *= (
-                                self.config.maxFEs / 100
-                            )
-                            self.test_results["T2"][self.agent_name_list[agent_id]] *= (
-                                self.config.maxFEs / 100
-                            )
+                        self.test_results["T1"][agent_name] = T1 / RUNS_NO
+                        self.test_results["T2"][agent_name] = T2 / RUNS_NO
                 # run traditional optimizer
-                for optimizer in self.t_optimizer_for_cp:
-                    T1 = 0
-                    T2 = 0
-                    for run in range(51):
+                for optimizer in self.traditional_optimizers:
+                    T1, T2 = 0.0, 0.0
+                    optimizer_name = type(optimizer).__name__
+                    for run in range(RUNS_NO):
                         start = time.perf_counter()
                         np.random.seed(self.seed[run])
-
                         problem.reset()
                         info = optimizer.run_episode(problem)
-                        cost = info["cost"]
-                        while len(cost) < 51:
-                            cost.append(cost[-1])
-                        fes = info["fes"]
-                        end = time.perf_counter()
-                        if i == 0:
-                            T1 += problem.T1
-                            T2 += (end - start) * 1000  # ms
-                        self.test_results["cost"][problem.__str__()][
-                            type(optimizer).__name__
-                        ].append(cost)
-                        self.test_results["fes"][problem.__str__()][
-                            type(optimizer).__name__
-                        ].append(fes)
-                        pbar_info = {
-                            "problem": problem.__str__(),
-                            "optimizer": type(optimizer).__name__,
-                            "run": run,
-                            "cost": cost[-1],
-                            "fes": fes,
-                        }
-                        pbar.set_postfix(pbar_info)
-                        pbar.update(1)
+                        T1, T2 = self.report_test_episode(
+                            optimizer_name, problem, info, pbar, start, T1, T2, i, run
+                        )
                     if i == 0:
-                        self.test_results["T1"][type(optimizer).__name__] = T1 / 51
-                        self.test_results["T2"][type(optimizer).__name__] = T2 / 51
-        with open(self.log_dir + "test.pkl", "wb") as f:
-            pickle.dump(self.test_results, f, -1)
+                        self.test_results["T1"][optimizer_name] = T1 / RUNS_NO
+                        self.test_results["T2"][optimizer_name] = T2 / RUNS_NO
+        with open(os.path.join(self.log_dir, "test.pkl"), "wb") as f:
+            pickle.dump(default_to_regular(self.test_results), f, -1)
         random_search_results = test_for_random_search(self.config)
-        with open(self.log_dir + "random_search_baseline.pkl", "wb") as f:
-            pickle.dump(random_search_results, f, -1)
+        with open(os.path.join(self.log_dir, "random_search_baseline.pkl"), "wb") as f:
+            pickle.dump(default_to_regular(random_search_results), f, -1)
+
+    def report_test_episode(
+        self, optimizer_type: str, problem, info, pbar, start, T1, T2, i: int, run: int
+    ):
+        cost = info["cost"]
+        cost.extend(
+            [cost[-1] for _ in range(RUNS_NO - len(cost))]
+        )  # extend cost to length of RUNS_NO
+        fes = info["fes"]
+        end = time.perf_counter()
+        if i == 0:
+            T1 += problem.T1
+            T2 += (end - start) * 1000  # ms
+        self.test_results["cost"][problem.__str__()][optimizer_type].append(cost)
+        self.test_results["fes"][problem.__str__()][optimizer_type].append(fes)
+        pbar_info = {
+            "problem": problem.__str__(),
+            "optimizer": optimizer_type,
+            "run": run,
+            "cost": cost[-1],
+            "fes": fes,
+        }
+        pbar.set_postfix(pbar_info)
+        pbar.update(1)
+        return T1, T2
 
 
 def rollout(config):
@@ -255,28 +214,26 @@ def rollout(config):
         load_agents[agent_name] = []
         for checkpoint in range(n_checkpoint + 1):
             file_path = os.path.join(
-                agent_load_dir + agent_name, f"checkpoint{checkpoint}.pkl"
+                agent_load_dir, agent_name, f"checkpoint{checkpoint}.pkl"
             )
             with open(file_path, "rb") as f:
                 load_agents[agent_name].append(pickle.load(f))
 
-    optimizer_for_rollout = []
-    for optimizer_name in config.optimizer_for_rollout:
-        optimizer_for_rollout.append(eval(optimizer_name)(copy.deepcopy(config)))
+    optimizer_for_rollout = [
+        eval(optimizer_name)(copy.deepcopy(config))
+        for optimizer_name in config.optimizer_for_rollout
+    ]
+
     for problem in train_set:
-        train_rollout_results["cost"][problem.__str__()] = {}
-        train_rollout_results["fes"][problem.__str__()] = {}
-        train_rollout_results["return"][problem.__str__()] = {}
-        for agent_name in agent_for_rollout:
-            train_rollout_results["cost"][problem.__str__()][agent_name] = []
-            train_rollout_results["fes"][problem.__str__()][agent_name] = []
-            train_rollout_results["return"][problem.__str__()][agent_name] = []
-            for checkpoint in range(0, n_checkpoint + 1):
-                train_rollout_results["cost"][problem.__str__()][agent_name].append([])
-                train_rollout_results["fes"][problem.__str__()][agent_name].append([])
-                train_rollout_results["return"][problem.__str__()][agent_name].append(
-                    []
-                )
+        train_rollout_results["cost"][problem.__str__()] = defaultdict(
+            lambda: [[] for _ in range(n_checkpoint + 1)]
+        )
+        train_rollout_results["fes"][problem.__str__()] = defaultdict(
+            lambda: [[] for _ in range(n_checkpoint + 1)]
+        )
+        train_rollout_results["return"][problem.__str__()] = defaultdict(
+            lambda: [[] for _ in range(n_checkpoint + 1)]
+        )
 
     pbar_len = (len(agent_for_rollout)) * train_set.N * (n_checkpoint + 1) * 5
     with tqdm(range(pbar_len), desc="Rollouting") as pbar:
@@ -284,45 +241,41 @@ def rollout(config):
             zip(agent_for_rollout, optimizer_for_rollout), range(n_checkpoint + 1)
         ):
             agent = load_agents[agent_name][checkpoint]
-            for i, problem in enumerate(train_set):
-                for run in range(5):
-                    np.random.seed(run)
+            for problem, run in product(train_set, range(5)):
+                np.random.seed(run)
 
-                    env = PBO_Env(problem, optimizer)
-
-                    info = agent.rollout_episode(env)
-                    cost = info["cost"]
-                    while len(cost) < 51:
-                        cost.append(cost[-1])
-                    fes = info["fes"]
-                    R = info["return"]
-
-                    train_rollout_results["cost"][problem.__str__()][agent_name][
+                environment = PBO_Env(problem, optimizer)
+                info = agent.rollout_episode(environment)
+                cost = info["cost"]
+                cost.extend(
+                    [cost[-1] for _ in range(RUNS_NO - len(cost))]
+                )  # extend cost to length of RUNS_NO
+                fes = info["fes"]
+                return_value = info["return"]
+                for attribute, data in zip(
+                    ("cost", "fes", "return"), (cost, fes, return_value)
+                ):
+                    train_rollout_results[attribute][problem.__str__()][agent_name][
                         checkpoint
-                    ].append(cost)
-                    train_rollout_results["fes"][problem.__str__()][agent_name][
-                        checkpoint
-                    ].append(fes)
-                    train_rollout_results["return"][problem.__str__()][agent_name][
-                        checkpoint
-                    ].append(R)
+                    ].append(data)
 
-                    pbar_info = {
-                        "problem": problem.__str__(),
-                        "agent": type(agent).__name__,
-                        "checkpoint": checkpoint,
-                        "run": run,
-                        "cost": cost[-1],
-                        "fes": fes,
-                    }
-                    pbar.set_postfix(pbar_info)
-                    pbar.update(1)
+                pbar_info = {
+                    "problem": problem.__str__(),
+                    "agent": type(agent).__name__,
+                    "checkpoint": checkpoint,
+                    "run": run,
+                    "cost": cost[-1],
+                    "fes": fes,
+                }
+                pbar.set_postfix(pbar_info)
+                pbar.update(1)
 
     log_dir = config.rollout_log_dir
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-    with open(log_dir + "rollout.pkl", "wb") as f:
-        pickle.dump(train_rollout_results, f, -1)
+    with open(os.path.join(log_dir, "rollout.pkl"), "wb") as f:
+        regular_dict = default_to_regular(train_rollout_results)
+        pickle.dump(regular_dict, f, -1)
 
 
 def test_for_random_search(config):
@@ -331,49 +284,46 @@ def test_for_random_search(config):
     entire_set = train_set + test_set
     # get optimizer
     optimizer = Random_search(copy.deepcopy(config))
+    optimizer_type = type(optimizer).__name__
     # initialize the dataframe for logging
-    test_results = {"cost": {}, "fes": {}, "T0": 0.0, "T1": {}, "T2": {}}
-    test_results["T1"][type(optimizer).__name__] = 0.0
-    test_results["T2"][type(optimizer).__name__] = 0.0
+    test_results = {
+        "cost": defaultdict(dict),
+        "fes": defaultdict(dict),
+        "T0": calculate_time_0(config.dim, config.maxFEs),  # calculate T0
+        "T1": {optimizer_type: 0.0},
+        "T2": {optimizer_type: 0.0},
+    }
+
     for problem in entire_set:
-        test_results["cost"][problem.__str__()] = {}
-        test_results["fes"][problem.__str__()] = {}
         test_results["cost"][problem.__str__()][
-            type(optimizer).__name__
-        ] = []  # 51 np.arrays
-        test_results["fes"][problem.__str__()][
-            type(optimizer).__name__
-        ] = []  # 51 scalars
-    # calculate T0
-    test_results["T0"] = calculate_time_0(config.dim, config.maxFEs)
+            optimizer_type
+        ] = []  # RUNS_NO np.arrays
+        test_results["fes"][problem.__str__()][optimizer_type] = []  # RUNS_NO scalars
+
     # begin testing
-    seed = range(51)
-    pbar_len = len(entire_set) * 51
+    pbar_len = len(entire_set) * RUNS_NO
     with tqdm(range(pbar_len), desc="test for random search") as pbar:
         for i, problem in enumerate(entire_set):
             T1 = 0
             T2 = 0
-            for run in range(51):
+            for run in range(RUNS_NO):
                 start = time.perf_counter()
-                np.random.seed(seed[run])
+                np.random.seed(run)
                 info = optimizer.run_episode(problem)
                 cost = info["cost"]
-                while len(cost) < 51:
-                    cost.append(cost[-1])
+                cost.extend(
+                    [cost[-1] for _ in range(RUNS_NO - len(cost))]
+                )  # extend cost to length of RUNS_NO
                 fes = info["fes"]
                 end = time.perf_counter()
                 if i == 0:
                     T1 += problem.T1
                     T2 += (end - start) * 1000  # ms
-                test_results["cost"][problem.__str__()][
-                    type(optimizer).__name__
-                ].append(cost)
-                test_results["fes"][problem.__str__()][type(optimizer).__name__].append(
-                    fes
-                )
+                test_results["cost"][problem.__str__()][optimizer_type].append(cost)
+                test_results["fes"][problem.__str__()][optimizer_type].append(fes)
                 pbar_info = {
                     "problem": problem.__str__(),
-                    "optimizer": type(optimizer).__name__,
+                    "optimizer": optimizer_type,
                     "run": run,
                     "cost": cost[-1],
                     "fes": fes,
@@ -381,8 +331,8 @@ def test_for_random_search(config):
                 pbar.set_postfix(pbar_info)
                 pbar.update(1)
             if i == 0:
-                test_results["T1"][type(optimizer).__name__] = T1 / 51
-                test_results["T2"][type(optimizer).__name__] = T2 / 51
+                test_results["T1"][optimizer_type] = T1 / RUNS_NO
+                test_results["T2"][optimizer_type] = T2 / RUNS_NO
     return test_results
 
 
@@ -423,23 +373,24 @@ def mgd_test(config):
     # calculate T0
     test_results["T0"] = calculate_time_0(config.dim, config.maxFEs)
     # begin mgd_test
-    seed = range(51)
-    pbar_len = len(agent_name_list) * len(test_set) * 51
+    seed = range(RUNS_NO)
+    pbar_len = len(agent_name_list) * len(test_set) * RUNS_NO
     with tqdm(range(pbar_len), desc="MGD_Test") as pbar:
         for i, problem in enumerate(test_set):
             # run model_from and model_to
             for agent_id, agent in enumerate([agent_from, agent_to]):
                 T1 = 0
                 T2 = 0
-                for run in range(51):
+                for run in range(RUNS_NO):
                     start = time.perf_counter()
                     np.random.seed(seed[run])
                     # construct an ENV for (problem,optimizer)
                     env = PBO_Env(problem, l_optimizer)
                     info = agent.rollout_episode(env)
                     cost = info["cost"]
-                    while len(cost) < 51:
-                        cost.append(cost[-1])
+                    cost.extend(
+                        [cost[-1] for _ in range(RUNS_NO - len(cost))]
+                    )  # extend cost to length of RUNS_NO
                     fes = info["fes"]
                     end = time.perf_counter()
                     if i == 0:
@@ -461,15 +412,17 @@ def mgd_test(config):
                     pbar.set_postfix(pbar_info)
                     pbar.update(1)
                 if i == 0:
-                    test_results["T1"][agent_name_list[agent_id]] = T1 / 51
-                    test_results["T2"][agent_name_list[agent_id]] = T2 / 51
+                    test_results["T1"][agent_name_list[agent_id]] = T1 / RUNS_NO
+                    test_results["T2"][agent_name_list[agent_id]] = T2 / RUNS_NO
     if not os.path.exists(config.mgd_test_log_dir):
         os.makedirs(config.mgd_test_log_dir)
-    with open(config.mgd_test_log_dir + "test.pkl", "wb") as f:
+    with open(os.path.join(config.mgd_test_log_dir, "test.pkl"), "wb") as f:
         pickle.dump(test_results, f, -1)
     random_search_results = test_for_random_search(config)
-    with open(config.mgd_test_log_dir + "random_search_baseline.pkl", "wb") as f:
-        pickle.dump(random_search_results, f, -1)
+    with open(
+        os.path.join(config.mgd_test_log_dir, "random_search_baseline.pkl"), "wb"
+    ) as f:
+        pickle.dump(default_to_regular(random_search_results), f, -1)
     logger = Logger(config)
     aei, aei_std = logger.aei_metric(test_results, random_search_results, config.maxFEs)
     print(f"AEI: {aei}")
@@ -613,4 +566,6 @@ def mte_test(config):
     plt.subplots_adjust(wspace=0.2)
     if not os.path.exists(config.mte_test_log_dir):
         os.makedirs(config.mte_test_log_dir)
-    plt.savefig(f"{config.mte_test_log_dir}/MTE_{agent}.png", bbox_inches="tight")
+    plt.savefig(
+        os.path.join(config.mte_test_log_dir, f"MTE_{agent}.png"), bbox_inches="tight"
+    )

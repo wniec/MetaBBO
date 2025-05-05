@@ -19,21 +19,25 @@ Your own agent should have the following methods:
        }
 """
 
-from environment import PBO_Env
 from typing import Tuple
 
 
 class Basic_Agent:
     def __init__(self, config):
         self.__config = config
+        self.average_actions_taken = []
+        self.actions_taken_variance = []
+
+    def get_average_actions(self):
+        return
 
     def update_setting(self, config):
         pass
 
-    def train_episode(self, env: PBO_Env) -> Tuple[bool, dict]:
+    def train_episode(self, env: "PBO_Env") -> Tuple[bool, dict]:  # noqa
         raise NotImplementedError
 
-    def rollout_episode(self, env: PBO_Env) -> dict:
+    def rollout_episode(self, env: "PBO_Env") -> dict:  # noqa
         raise NotImplementedError
 
     def train_epoch(self):
